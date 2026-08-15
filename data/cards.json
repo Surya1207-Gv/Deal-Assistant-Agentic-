@@ -1,0 +1,109 @@
+[
+  {
+    "card_id": "hdfc_millennia",
+    "name": "HDFC Millennia",
+    "base_rate": 0.01,
+    "category_multipliers": {
+      "groceries": 5.0,
+      "shopping": 5.0,
+      "travel": 2.5,
+      "dining": 2.5
+    },
+    "caps": {
+      "monthly_cashback_cap": 1000,
+      "category_caps": {
+        "groceries": 500,
+        "shopping": 800
+      }
+    },
+    "min_spend": 0,
+    "cap_period": "monthly"
+  },
+  {
+    "card_id": "hdfc_regalia",
+    "name": "HDFC Regalia Gold",
+    "base_rate": 0.015,
+    "category_multipliers": {
+      "travel": 4.0,
+      "dining": 2.0
+    },
+    "caps": {
+      "monthly_cashback_cap": 2000,
+      "category_caps": {
+        "travel": 1500
+      }
+    },
+    "min_spend": 0,
+    "cap_period": "monthly"
+  },
+  {
+    "card_id": "axis_ace",
+    "name": "Axis Bank ACE",
+    "base_rate": 0.02,
+    "category_multipliers": {
+      "bills": 2.5,
+      "groceries": 2.0,
+      "food": 2.5
+    },
+    "caps": {
+      "monthly_cashback_cap": 500,
+      "category_caps": {
+        "bills": 500
+      }
+    },
+    "min_spend": 0,
+    "cap_period": "monthly"
+  },
+  {
+    "card_id": "icici_amazon_pay",
+    "name": "ICICI Amazon Pay",
+    "base_rate": 0.01,
+    "category_multipliers": {
+      "shopping": 5.0,
+      "groceries": 3.0,
+      "bills": 2.0
+    },
+    "caps": {
+      "monthly_cashback_cap": 999999,
+      "category_caps": {}
+    },
+    "min_spend": 0,
+    "cap_period": "monthly"
+  },
+  {
+    "card_id": "sbi_cashback",
+    "name": "SBI Cashback Card",
+    "base_rate": 0.01,
+    "category_multipliers": {
+      "shopping": 5.0,
+      "groceries": 5.0,
+      "travel": 5.0,
+      "electronics": 5.0
+    },
+    "caps": {
+      "monthly_cashback_cap": 5000,
+      "category_caps": {}
+    },
+    "min_spend": 0,
+    "cap_period": "monthly"
+  },
+  {
+    "card_id": "amex_smartearn",
+    "name": "Amex SmartEarn",
+    "base_rate": 0.01,
+    "category_multipliers": {
+      "food": 10.0,
+      "groceries": 5.0,
+      "shopping": 5.0
+    },
+    "caps": {
+      "monthly_cashback_cap": 2500,
+      "category_caps": {
+        "food": 500,
+        "groceries": 500
+      }
+    },
+    "min_spend": 500,
+    "cap_period": "monthly"
+  }
+]

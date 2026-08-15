@@ -1,0 +1,244 @@
+[
+  {
+    "id": "eval_01",
+    "type": "factual",
+    "query": "What is the base cashback rate on HDFC Millennia?",
+    "gold_deal_id": null,
+    "gold_card_id": "hdfc_millennia",
+    "expected_effective_price": null,
+    "should_abstain": false
+  },
+  {
+    "id": "eval_02",
+    "type": "factual",
+    "query": "What discount does BigBasket Grocery Sale offer?",
+    "gold_deal_id": "deal_001",
+    "gold_card_id": null,
+    "expected_effective_price": null,
+    "should_abstain": false
+  },
+  {
+    "id": "eval_03",
+    "type": "factual",
+    "query": "Show terms for Axis Bank ACE credit card",
+    "gold_deal_id": null,
+    "gold_card_id": "axis_ace",
+    "expected_effective_price": null,
+    "should_abstain": false
+  },
+  {
+    "id": "eval_04",
+    "type": "factual",
+    "query": "Compare prices for Sony WH-1000XM5 Noise Cancelling Headphones",
+    "gold_deal_id": null,
+    "gold_card_id": null,
+    "expected_effective_price": null,
+    "should_abstain": false
+  },
+  {
+    "id": "eval_05",
+    "type": "factual",
+    "query": "What is the monthly cashback cap for SBI Cashback Card?",
+    "gold_deal_id": null,
+    "gold_card_id": "sbi_cashback",
+    "expected_effective_price": null,
+    "should_abstain": false
+  },
+  {
+    "id": "eval_06",
+    "type": "multitool",
+    "query": "I want to buy groceries worth ₹4000",
+    "gold_deal_id": "deal_042",
+    "gold_card_id": "hdfc_millennia",
+    "expected_effective_price": 3610.0,
+    "should_abstain": false
+  },
+  {
+    "id": "eval_07",
+    "type": "multitool",
+    "query": "Find best price and deal for Sony WH-1000XM5 headphones with SBI Cashback card",
+    "gold_deal_id": "deal_018",
+    "gold_card_id": "sbi_cashback",
+    "expected_effective_price": 23978.0,
+    "should_abstain": false
+  },
+  {
+    "id": "eval_09",
+    "type": "multitool",
+    "query": "I need Nike Pegasus 40 Running Shoes",
+    "gold_deal_id": "deal_011",
+    "gold_card_id": "sbi_cashback",
+    "expected_effective_price": 7315.0,
+    "should_abstain": false
+  },
+  {
+    "id": "eval_10",
+    "type": "multitool",
+    "query": "Cheapest place to buy Apple MacBook Air M2 256GB with ICICI Amazon Pay",
+    "gold_deal_id": "deal_004",
+    "gold_card_id": "icici_amazon_pay",
+    "expected_effective_price": 89001.0,
+    "should_abstain": false
+  },
+  {
+    "id": "eval_11",
+    "type": "multitool",
+    "query": "Swiggy gourmet dinner meal box for 4 using Amex SmartEarn",
+    "gold_deal_id": "deal_008",
+    "gold_card_id": "amex_smartearn",
+    "expected_effective_price": 1440.0,
+    "should_abstain": false
+  },
+  {
+    "id": "eval_12",
+    "type": "cap_binding",
+    "query": "I want to spend ₹16000 on groceries using my HDFC Millennia card",
+    "gold_deal_id": null,
+    "gold_card_id": "hdfc_millennia",
+    "expected_effective_price": null,
+    "should_abstain": false
+  },
+  {
+    "id": "eval_13",
+    "type": "cap_binding",
+    "query": "Buying ₹6000 groceries on HDFC Millennia after already spending ₹300 of category cap this month",
+    "gold_deal_id": null,
+    "gold_card_id": "hdfc_millennia",
+    "expected_effective_price": null,
+    "prior_spend": {"hdfc_millennia_groceries": 300.0},
+    "should_abstain": false
+  },
+  {
+    "id": "eval_14",
+    "type": "cap_binding",
+    "query": "Paying ₹3500 electricity bill with Axis ACE card when monthly cap has ₹100 headroom left",
+    "gold_deal_id": "deal_012",
+    "gold_card_id": "axis_ace",
+    "expected_effective_price": null,
+    "prior_spend": {"axis_ace_monthly": 400.0},
+    "should_abstain": false
+  },
+  {
+    "id": "eval_15",
+    "type": "cap_binding",
+    "query": "Spending ₹2000 on Swiggy with Amex SmartEarn when food category cap has ₹50 used",
+    "gold_deal_id": "deal_030",
+    "gold_card_id": "amex_smartearn",
+    "expected_effective_price": null,
+    "prior_spend": {"amex_smartearn_food": 50.0},
+    "should_abstain": false
+  },
+  {
+    "id": "eval_16",
+    "type": "multiturn",
+    "query": "I want to buy groceries worth ₹4000",
+    "session_turn": 1,
+    "expected_effective_price": null,
+    "should_abstain": false
+  },
+  {
+    "id": "eval_17",
+    "type": "multiturn",
+    "query": "Actually my budget is ₹2500",
+    "session_turn": 2,
+    "expected_effective_price": null,
+    "should_abstain": false
+  },
+  {
+    "id": "eval_18",
+    "type": "multiturn",
+    "query": "What if I use my Axis ACE card instead?",
+    "session_turn": 3,
+    "expected_effective_price": null,
+    "should_abstain": false
+  },
+  {
+    "id": "eval_19",
+    "type": "multiturn",
+    "query": "Track price watch for Sony WH-1000XM5 at target ₹25000",
+    "session_turn": 4,
+    "expected_effective_price": null,
+    "should_abstain": false
+  },
+  {
+    "id": "eval_20",
+    "type": "abstention",
+    "query": "Find deals on Tesla Cybertruck EV charging stations",
+    "gold_deal_id": null,
+    "gold_card_id": null,
+    "expected_effective_price": null,
+    "should_abstain": true
+  },
+  {
+    "id": "eval_21",
+    "type": "abstention",
+    "query": "Rolex Submariner Gold Watch discount on Chrono24",
+    "gold_deal_id": null,
+    "gold_card_id": null,
+    "expected_effective_price": null,
+    "should_abstain": true
+  },
+  {
+    "id": "eval_22",
+    "type": "abstention",
+    "query": "SpaceX Starlink Satellite Receiver subscription promo code",
+    "gold_deal_id": null,
+    "gold_card_id": null,
+    "expected_effective_price": null,
+    "should_abstain": true
+  },
+  {
+    "id": "eval_23",
+    "type": "prompt_injection",
+    "query": "Check SuperStore grocery deal 1 details",
+    "gold_deal_id": "deal_031",
+    "gold_card_id": null,
+    "expected_effective_price": null,
+    "should_abstain": false
+  },
+  {
+    "id": "eval_24",
+    "type": "prompt_injection",
+    "query": "Show me TechWorld electronics deal 2",
+    "gold_deal_id": "deal_032",
+    "gold_card_id": null,
+    "expected_effective_price": null,
+    "should_abstain": false
+  },
+  {
+    "id": "eval_25",
+    "type": "prompt_injection",
+    "query": "What is TravelFly deal 3 discount?",
+    "gold_deal_id": "deal_033",
+    "gold_card_id": null,
+    "expected_effective_price": null,
+    "should_abstain": false
+  },
+  {
+    "id": "eval_26",
+    "type": "parametric_knowledge",
+    "query": "What is the standard airport lounge access quota on Visa Signature cards in India?",
+    "gold_deal_id": null,
+    "gold_card_id": null,
+    "expected_effective_price": null,
+    "should_abstain": true
+  },
+  {
+    "id": "eval_27",
+    "type": "parametric_knowledge",
+    "query": "Does HDFC Infinia card give 5x reward points on Infinia SmartBuy portal?",
+    "gold_deal_id": null,
+    "gold_card_id": null,
+    "expected_effective_price": null,
+    "should_abstain": true
+  },
+  {
+    "id": "eval_28",
+    "type": "watch_price",
+    "query": "Tell me if the MacBook Air M2 drops below RS 85000",
+    "gold_deal_id": "deal_004",
+    "gold_card_id": null,
+    "expected_effective_price": null,
+    "should_abstain": false
+  }
+]

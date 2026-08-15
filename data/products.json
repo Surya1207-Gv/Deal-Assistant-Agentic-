@@ -1,0 +1,169 @@
+[
+  {
+    "product_id": "prod_grocery_basket_1",
+    "name": "Monthly Grocery Essentials Basket",
+    "category": "groceries",
+    "prices": {
+      "BigBasket": 4000,
+      "Blinkit": 4150,
+      "Zepto": 4200,
+      "Instamart": 4100
+    },
+    "description": "Monthly staple groceries including rice, flour, oil, and spices."
+  },
+  {
+    "product_id": "prod_iphone_15",
+    "name": "Apple iPhone 15 128GB",
+    "category": "electronics",
+    "prices": {
+      "Amazon": 69900,
+      "Flipkart": 68999,
+      "Croma": 71900,
+      "Reliance Digital": 70500
+    },
+    "description": "Apple iPhone 15 128GB smartphone with A16 Bionic chip."
+  },
+  {
+    "product_id": "prod_sony_headphones",
+    "name": "Sony WH-1000XM5 Noise Cancelling Headphones",
+    "category": "electronics",
+    "prices": {
+      "Amazon": 26990,
+      "Flipkart": 27500,
+      "Croma": 28990
+    },
+    "description": "Premium wireless noise cancelling headphones by Sony."
+  },
+  {
+    "product_id": "prod_macbook_air_m2",
+    "name": "Apple MacBook Air M2 256GB",
+    "category": "electronics",
+    "prices": {
+      "Amazon": 92900,
+      "Flipkart": 91990,
+      "Croma": 94900
+    },
+    "description": "Apple MacBook Air 13.6-inch laptop with M2 chip."
+  },
+  {
+    "product_id": "prod_flight_del_bom",
+    "name": "Flight Ticket Delhi to Mumbai",
+    "category": "travel",
+    "prices": {
+      "MakeMyTrip": 5400,
+      "EaseMyTrip": 5250,
+      "Cleartrip": 5350,
+      "Yatra": 5500
+    },
+    "description": "One-way economy flight ticket from New Delhi (DEL) to Mumbai (BOM)."
+  },
+  {
+    "product_id": "prod_hotel_goa_resort",
+    "name": "Beach Resort Stay Goa (2 Nights)",
+    "category": "travel",
+    "prices": {
+      "MakeMyTrip": 12500,
+      "Agoda": 11800,
+      "Booking.com": 12200
+    },
+    "description": "2 nights luxury resort stay in North Goa."
+  },
+  {
+    "product_id": "prod_swiggy_gourmet_meal",
+    "name": "Gourmet Dinner Meal Box for 4",
+    "category": "food",
+    "prices": {
+      "Swiggy": 1800,
+      "Zomato": 1850,
+      "EatSure": 1750
+    },
+    "description": "Multi-course dinner meal box from top rated restaurants."
+  },
+  {
+    "product_id": "prod_nike_running_shoes",
+    "name": "Nike Pegasus 40 Running Shoes",
+    "category": "shopping",
+    "prices": {
+      "Myntra": 8495,
+      "Ajio": 8200,
+      "Amazon": 8995
+    },
+    "description": "Nike men's neutral road running shoes."
+  },
+  {
+    "product_id": "prod_samsung_4k_tv",
+    "name": "Samsung 55-inch 4K Smart TV",
+    "category": "electronics",
+    "prices": {
+      "Amazon": 44990,
+      "Flipkart": 43990,
+      "Reliance Digital": 46990
+    },
+    "description": "55-inch Crystal 4K UHD Smart TV."
+  },
+  {
+    "product_id": "prod_coffee_maker",
+    "name": "Delonghi Espresso Coffee Machine",
+    "category": "electronics",
+    "prices": {
+      "Amazon": 14990,
+      "Flipkart": 15490,
+      "Croma": 15990
+    },
+    "description": "Pump espresso coffee machine for cappuccino and latte."
+  },
+  {
+    "product_id": "prod_organic_milk_curd_pack",
+    "name": "Organic Milk & Dairy Monthly Pass",
+    "category": "groceries",
+    "prices": {
+      "Country Delight": 1500,
+      "BigBasket": 1600,
+      "Instamart": 1580
+    },
+    "description": "30 days fresh organic cow milk subscription."
+  },
+  {
+    "product_id": "prod_levis_jeans",
+    "name": "Levi's 511 Slim Fit Jeans",
+    "category": "shopping",
+    "prices": {
+      "Myntra": 2399,
+      "Ajio": 2299,
+      "Amazon": 2499
+    },
+    "description": "Men's classic slim fit denim jeans."
+  },
+  {
+    "product_id": "prod_electricity_bill_payment",
+    "name": "Monthly Electricity Utility Bill",
+    "category": "bills",
+    "prices": {
+      "Amazon Pay": 3500,
+      "Paytm": 3500,
+      "Google Pay": 3500
+    },
+    "description": "Utility electricity bill payment service."
+  },
+  {
+    "product_id": "prod_kindle_paperwhite",
+    "name": "Kindle Paperwhite 16GB",
+    "category": "electronics",
+    "prices": {
+      "Amazon": 13999,
+      "Croma": 14999
+    },
+    "description": "6.8 inch display waterproof e-reader."
+  },
+  {
+    "product_id": "prod_backpack_samsonite",
+    "name": "Samsonite Laptop Backpack 25L",
+    "category": "shopping",
+    "prices": {
+      "Myntra": 4200,
+      "Amazon": 3999,
+      "Flipkart": 4100
+    },
+    "description": "Ergonomic laptop backpack with rain cover."
+  }
+]
