@@ -12,6 +12,12 @@ class SessionMemory:
     spend_to_date: Dict[str, float] = field(default_factory=dict)
     price_watches: Dict[str, float] = field(default_factory=dict)
     history: List[Dict[str, str]] = field(default_factory=list)
+    conversation_state: Dict[str, Any] = field(default_factory=lambda: {
+        "budget": None,
+        "preferred_card": None,
+        "category_preferences": {},
+        "other_relevant_constraints": {}
+    })
 
 class MemoryManager:
     """
@@ -30,6 +36,7 @@ class MemoryManager:
     def update_budget(cls, session_id: str, budget: float) -> SessionMemory:
         session = cls.get_session(session_id)
         session.budget = budget
+        session.conversation_state["budget"] = budget
         return session
 
     @classmethod
@@ -42,6 +49,27 @@ class MemoryManager:
     def update_card(cls, session_id: str, card_id: str) -> SessionMemory:
         session = cls.get_session(session_id)
         session.preferred_card = card_id
+        session.conversation_state["preferred_card"] = card_id
+        return session
+
+    @classmethod
+    def update_category_preference(cls, session_id: str, category: str, card_id: str) -> SessionMemory:
+        session = cls.get_session(session_id)
+        session.conversation_state.setdefault("category_preferences", {})
+        session.conversation_state["category_preferences"][category] = card_id
+        return session
+
+    @classmethod
+    def set_conversation_state(cls, session_id: str, state: Dict[str, Any]) -> SessionMemory:
+        session = cls.get_session(session_id)
+        session.conversation_state = {
+            "budget": state.get("budget"),
+            "preferred_card": state.get("preferred_card"),
+            "category_preferences": dict(state.get("category_preferences", {})),
+            "other_relevant_constraints": dict(state.get("other_relevant_constraints", {})),
+        }
+        session.budget = session.conversation_state["budget"]
+        session.preferred_card = session.conversation_state["preferred_card"]
         return session
 
     @classmethod

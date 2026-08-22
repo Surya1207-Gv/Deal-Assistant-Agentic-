@@ -4,15 +4,16 @@ from app.tools.compare_prices import compare_prices
 from app.core.provenance import Value, Provenance
 from app.core.memory import MemoryManager
 
-def watch_price(product_name: str, target_price: float, session_id: str = "default") -> Dict[str, Any]:
+def watch_price(product_name: str, target_price: float = 25000.0, session_id: str = "default") -> Dict[str, Any]:
     """
     Tool 5: Registers price watch for product, calculates gap to target price,
     and returns status with tagged Value objects.
     """
+    clean_target = float(target_price if target_price is not None else 25000.0)
     cmp_res = compare_prices(product_name)
 
     target_val = Value(
-        amount=float(target_price),
+        amount=clean_target,
         provenance=Provenance.SOURCE,
         record_id="user_target_price"
     )

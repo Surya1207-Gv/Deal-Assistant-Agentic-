@@ -102,25 +102,85 @@ class HybridRetriever:
             scores.append(float(sim))
         return scores
 
-    def search(self, query: str, top_k: int = 5) -> Tuple[List[Dict[str, Any]], bool, float]:
+    def _is_ungrounded_entity(self, query: str) -> bool:
+        """
+        Dynamically verifies if the query asks for a specific named product, service, or card
+        that does NOT exist anywhere in products.json, cards.json, or deals.json.
+        No hardcoded entity lists.
+        """
+        q_low = query.lower()
+        
+        # Build dynamic vocabulary of all known entities in authoritative JSONs
+        known_tokens = set()
+        for p in self.products:
+            known_tokens.update(re.findall(r"[a-z0-9]+", p["name"].lower()))
+            known_tokens.update(re.findall(r"[a-z0-9]+", p["product_id"].lower()))
+            for m in p.get("prices", {}).keys():
+                known_tokens.update(re.findall(r"[a-z0-9]+", m.lower()))
+
+        for c in self.cards:
+            known_tokens.update(re.findall(r"[a-z0-9]+", c["name"].lower()))
+            known_tokens.update(re.findall(r"[a-z0-9]+", c["card_id"].lower()))
+
+        for d in self.deals:
+            known_tokens.update(re.findall(r"[a-z0-9]+", d["title"].lower()))
+            known_tokens.update(re.findall(r"[a-z0-9]+", d["merchant"].lower()))
+            known_tokens.update(re.findall(r"[a-z0-9]+", d.get("category", "").lower()))
+
+        # Check if query asks to buy/price a specific named entity
+        action_match = re.search(r"(?:cheapest|best price for|buy|purchase|way to buy|price for|drops below|promo code for|deal for|quota for|compare prices for)\s+([a-zA-Z0-9\s'-]+)", query, re.IGNORECASE)
+        if action_match:
+            candidate = action_match.group(1).strip().lower()
+            candidate_tokens = [t for t in re.findall(r"[a-z0-9]+", candidate) if t not in GENERIC_STOPWORDS and len(t) > 2]
+            if candidate_tokens:
+                # If all significant candidate tokens are completely absent from known catalog
+                matched_count = sum(1 for t in candidate_tokens if t in known_tokens)
+                if matched_count == 0:
+                    return True
+
+        return False
+
+    def search(self, query: str, category: str | None = None, top_k: int = 5) -> Tuple[List[Dict[str, Any]], bool, float]:
         if not self.deals:
             return [], True, 0.0
 
-        # Parametric entity presence check (Grounding rule)
-        # If query asks about a specific card name like 'Visa Signature' or 'Infinia' not present in dataset:
+        # Dynamic Parametric Entity Grounding Check (No hardcoded entity lists)
+        if self._is_ungrounded_entity(query):
+            return [], True, 0.0
+
         q_lower = query.lower()
-        known_card_names = {"millennia", "regalia", "ace", "amazon pay", "cashback", "smartearn"}
-        if "card" in q_lower or "visa" in q_lower or "infinia" in q_lower:
-            if not any(k in q_lower for k in known_card_names) and ("signature" in q_lower or "infinia" in q_lower):
-                return [], True, 0.05
 
-        bm25_s, has_content_match = self._bm25_scores(query)
-        dense_s = self._dense_scores(query)
+        # Dynamic Category Resolution from matching product in products.json
+        if not category:
+            for p in self.products:
+                p_name = p["name"].lower()
+                p_tokens = set(re.findall(r"[a-z0-9]+", p_name))
+                q_tokens = set(re.findall(r"[a-z0-9]+", q_lower))
+                if p_name in q_lower or (len(p_tokens.intersection(q_tokens)) >= 2 and not q_tokens.isdisjoint(p_tokens)):
+                    category = p.get("category")
+                    break
 
-        query_tokens = set(w.lower() for w in re.findall(r"\w+", query) if w.lower() not in GENERIC_STOPWORDS)
+        if not category:
+            for d in self.deals:
+                d_cat = d.get("category", "").lower()
+                if d_cat and d_cat in q_lower:
+                    category = d_cat
+                    break
+
+        effective_query = f"{category} {query}" if category and (category not in q_lower) else query
+
+        bm25_s, has_content_match = self._bm25_scores(effective_query)
+        dense_s = self._dense_scores(effective_query)
+
+        query_tokens = set(w.lower() for w in re.findall(r"\w+", effective_query) if w.lower() not in GENERIC_STOPWORDS)
 
         hybrid_scores = []
         for i in range(len(self.deals)):
+            deal_cat = self.deals[i].get("category", "").lower()
+            # Category Isolation Filter: If query category is known, exclude non-matching categories (unless universal)
+            if category and deal_cat and deal_cat not in ["all", "any"] and deal_cat != category.lower():
+                continue
+
             b_score = bm25_s[i]
             d_score = dense_s[i]
 
@@ -128,14 +188,13 @@ class HybridRetriever:
 
             card_sp = (self.deals[i].get("card_specific") or "").replace("_", " ")
             merchant = self.deals[i].get("merchant", "").lower()
-            category = self.deals[i].get("category", "").lower()
 
             if merchant and merchant in q_lower:
                 score += 0.25
             if card_sp and card_sp.lower() in q_lower:
                 score += 0.25
-            if category and category in q_lower:
-                score += 0.10
+            if deal_cat and (deal_cat in q_lower or (category and deal_cat == category.lower())):
+                score += 0.20
 
             corpus_clean = self.corpus[i].lower().replace("_", " ")
             if not has_content_match and not any(q in corpus_clean for q in query_tokens):
@@ -146,7 +205,7 @@ class HybridRetriever:
         hybrid_scores.sort(key=lambda x: x[1], reverse=True)
         max_score = float(hybrid_scores[0][1]) if hybrid_scores else 0.0
 
-        abstained = bool(max_score < RETRIEVAL_THRESHOLD)
+        abstained = bool(max_score < RETRIEVAL_THRESHOLD or len(hybrid_scores) == 0)
 
         results = []
         for idx, score in hybrid_scores[:top_k]:

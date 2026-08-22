@@ -5,9 +5,13 @@ import hashlib
 import time
 import sys
 import re
+import warnings
 from pathlib import Path
 from typing import List, Tuple, Dict, Any
 from dotenv import load_dotenv
+
+warnings.filterwarnings("ignore", message=".*automatic function calling.*")
+warnings.filterwarnings("ignore", category=UserWarning, module="google.genai")
 
 load_dotenv()
 
@@ -89,16 +93,18 @@ class Planner:
                 f"Given the user request, return a JSON object with key 'planned_tools' containing\n"
                 f"an ordered list subset of available tools: ['search_deals', 'compare_prices', 'best_card', 'get_reward_rules', 'watch_price'].\n\n"
                 f"Tool Capabilities:\n"
-                f"- 'compare_prices': Finds prices across merchants for any named product (e.g. Sony headphones, MacBook, Nike shoes, Swiggy meal, iPhone, electronics, groceries). Plan this first whenever a product or purchase is requested.\n"
+                f"- 'compare_prices': Finds prices across merchants for any named product (e.g. Sony headphones, MacBook, Nike shoes, Swiggy meal, iPhone, electronics, groceries).\n"
                 f"- 'search_deals': Finds merchant coupon discounts and promotional offers.\n"
                 f"- 'best_card': Evaluates card cashback, reward rates, and determines the best card.\n"
                 f"- 'get_reward_rules': Checks card terms, category caps, headroom, and reward policy limits.\n"
                 f"- 'watch_price': Sets price drop alerts when user specifies a target trigger price.\n\n"
-                f"Planning Rules:\n"
-                f"1. When a query asks for a product, shopping deal, or purchase, plan ['compare_prices', 'search_deals', 'best_card'].\n"
-                f"2. When user asks for category cap, monthly limit, or card reward rules, plan ['get_reward_rules'].\n"
-                f"3. When user specifies a budget change in follow-up, plan ['best_card'].\n"
-                f"4. When user asks for a price watch or alert below a threshold, plan ['watch_price'].\n\n"
+                f"Intent Planning Rules:\n"
+                f"1. DEAL_DISCOVERY / DEAL_EXPLANATION (e.g. 'What deals are available at BigBasket?', 'What discounts does Amazon have?', 'Show me grocery offers', 'What does deal_032 offer?'): plan ['search_deals'] ONLY.\n"
+                f"2. PRICE_LOOKUP (e.g. 'Compare prices for Sony WH-1000XM5', 'How much is iPhone 15 on Flipkart?'): plan ['compare_prices'] ONLY.\n"
+                f"3. CARD_INFO / CARD_REWARD (e.g. 'Reward cap on HDFC Millennia groceries', 'Which card is best for ₹6,000 groceries?'): plan ['get_reward_rules'] or ['best_card', 'get_reward_rules'].\n"
+                f"4. PRICE_WATCH (e.g. 'Track Sony WH-1000XM5 at ₹25000', 'Alert if price drops'): plan ['watch_price'] ONLY.\n"
+                f"5. PRODUCT_OPTIMIZATION (e.g. 'Cheapest way to buy iPhone 15', 'Buy groceries worth ₹4000'): plan ['compare_prices', 'search_deals', 'best_card'].\n"
+                f"6. MEMORY_UPDATE (e.g. 'I prefer HDFC Millennia', 'My budget is ₹3,300'): plan [].\n\n"
                 f"User Request: {query}\n"
                 f"Return JSON ONLY."
             )
@@ -119,7 +125,7 @@ class Planner:
                         if json_match:
                             data = json.loads(json_match.group(0))
                             tools = data.get("planned_tools", [])
-                            if isinstance(tools, list) and len(tools) > 0:
+                            if isinstance(tools, list):
                                 res_tools, res_mode = tools, "llm"
                                 cache[q_hash] = {"planned_tools": res_tools, "planner_mode": "llm"}
                                 cls._save_cache(cache)
@@ -142,11 +148,29 @@ class Planner:
 
     @classmethod
     def _deterministic_plan(cls, q_lower: str) -> List[str]:
-        if "category cap" in q_lower or "reward rules" in q_lower or "policy" in q_lower:
-            return ["get_reward_rules"]
-        if "actually my budget" in q_lower or "budget is" in q_lower:
-            return ["best_card"]
-        if "watch" in q_lower or "alert" in q_lower or "drop" in q_lower:
+        # Memory Updates
+        if ("prefer" in q_lower or "use" in q_lower or "actually" in q_lower) and any(card in q_lower for card in ["hdfc millennia", "sbi cashback", "axis ace", "amex", "icici", "regalia", "millennia", "sbi", "axis"]):
+            if not any(w in q_lower for w in ["buy", "cheapest", "price", "order", "what is"]):
+                return []
+        if "budget" in q_lower and ("is" in q_lower or "my budget" in q_lower or "make that" in q_lower or "₹" in q_lower or "rs" in q_lower):
+            if not any(w in q_lower for w in ["buy", "cheapest", "price", "order", "what is"]):
+                return []
+
+        # Price Watch
+        if "watch" in q_lower or "alert" in q_lower or "drops below" in q_lower or "track" in q_lower:
             return ["watch_price"]
 
+        # Price Lookup
+        if any(w in q_lower for w in ["compare prices for", "compare price for", "how much is", "price on"]) and not any(w in q_lower for w in ["buy", "cheapest", "deal", "discount", "offer"]):
+            return ["compare_prices"]
+
+        # Card Info
+        if any(w in q_lower for w in ["reward cap", "category cap", "caps on", "base cashback rate", "reward rules", "does sbi cover", "does hdfc cover"]):
+            return ["get_reward_rules"]
+
+        # Deal Discovery / Deal Explanation
+        if any(w in q_lower for w in ["what deals are available", "what grocery deals", "what discounts does", "show me", "does blinkit have", "any deal for", "deals that work with", "largest discount at", "what does", "deal details", "discount does", "is there a deal", "offers on", "offers at", "deals at", "deals on"]) and not any(w in q_lower for w in ["cheapest way", "buy", "purchase"]):
+            return ["search_deals"]
+
+        # Product Optimization
         return ["compare_prices", "search_deals", "best_card"]

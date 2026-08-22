@@ -81,7 +81,7 @@
       "electronics": 5.0
     },
     "caps": {
-      "monthly_cashback_cap": 5000,
+      "monthly_cashback_cap": 2000,
       "category_caps": {}
     },
     "min_spend": 0,

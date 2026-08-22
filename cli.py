@@ -1,10 +1,20 @@
 from __future__ import annotations
 import sys
+import site
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
+
+# Ensure site packages (global user site & venv Lib) are included in sys.path
+user_site = site.getusersitepackages()
+if user_site and user_site not in sys.path:
+    sys.path.append(user_site)
+
+venv_site = PROJECT_ROOT / "venv" / "Lib" / "site-packages"
+if venv_site.exists() and str(venv_site) not in sys.path:
+    sys.path.append(str(venv_site))
 
 from app.agent.graph import build_agent_graph
 from app.core.memory import MemoryManager

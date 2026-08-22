@@ -165,5 +165,16 @@
       "Flipkart": 4100
     },
     "description": "Ergonomic laptop backpack with rain cover."
+  },
+  {
+    "product_id": "prod_iphone_16",
+    "name": "Apple iPhone 16 128GB",
+    "category": "electronics",
+    "prices": {
+      "Flipkart": 65900,
+      "Amazon": 66900,
+      "Croma": 67900
+    },
+    "description": "Apple iPhone 16 128GB smartphone with A18 Bionic chip."
   }
 ]

@@ -11,6 +11,7 @@ class AgentState(TypedDict, total=False):
     merchant: Optional[str]
     budget: Optional[float]
     preferred_card: Optional[str]
+    conversation_state: Dict[str, Any]
     spend_to_date: Dict[str, float]
     
     # RAG Retrieval state
@@ -21,11 +22,17 @@ class AgentState(TypedDict, total=False):
     # Tool Execution state
     planned_tools: List[str]
     tool_results: Dict[str, Any]
+    tool_mapping: Dict[str, str]
     
     # Reward Math state
     payment_options: List[PaymentOption]
     best_option: Optional[PaymentOption]
+    runner_up_option: Optional[PaymentOption]
     trace: List[Value]
+    skip_planning: bool
+    is_info_query: bool
+    is_tie: bool
+    tied_merchants: List[str]
     
     # Provenance Validation state
     draft_response: str

@@ -27,16 +27,30 @@ class ProvenanceValidator:
     Ignores non-monetary tokens (deal IDs like deal_042, dates like 2026, list indices).
     """
 
-    EXPLICIT_IGNORES: Set[str] = {
-        "1", "2", "3", "4", "6", "7", "8", "9", "10", "42", "31", "17", "14", "39", "35", "43", "45",
-        "2024", "2025", "2026", "2027", "2028", "2029", "2030",
-        "24", "12", "30", "365",
-        "128", "256", "512", "55", "13", "14", "15", "16", "40"
-    }
-
     @classmethod
-    def extract_numeric_tokens(cls, text: str) -> List[tuple[str, float]]:
-        cleaned_text = re.sub(r"deal_\d+|card_\w+|(?:retrieval\s+)?confidence\s*\(\d+(?:\.\d+)?\)", "", text, flags=re.IGNORECASE)
+    def extract_numeric_tokens(cls, text: str, product_names: Optional[List[str]] = None) -> List[tuple[str, float]]:
+        cleaned_text = text
+
+        # 1. Mask known product names so their model numbers (e.g. "Apple iPhone 15 128GB", "Sony WH-1000XM5") aren't parsed as prices
+        if product_names:
+            for p_name in product_names:
+                if p_name and len(p_name) > 3:
+                    cleaned_text = re.sub(re.escape(p_name), "[PRODUCT_NAME]", cleaned_text, flags=re.IGNORECASE)
+
+        # 2. Mask entity IDs and metadata tokens
+        cleaned_text = re.sub(r"\b(?:deal_\w+|card_\w+|prod_\w+)\b", "[ID]", cleaned_text, flags=re.IGNORECASE)
+        cleaned_text = re.sub(r"(?:retrieval\s+)?confidence\s*\(\d+(?:\.\d+)?\)", "", cleaned_text, flags=re.IGNORECASE)
+
+        # 3. Mask alphanumeric model/spec tokens (e.g. WH-1000XM5, M2, 55-inch, 128GB, 256GB, 4K, 5x, Levi's 511)
+        # Matches tokens with letters + digits or hyphens (e.g., WH-1000XM5, 55-inch, 128GB, M2)
+        cleaned_text = re.sub(r"\b[A-Za-z]+[-_/\\]?\d+[A-Za-z0-9-_]*\b", "[MODEL]", cleaned_text)
+        cleaned_text = re.sub(r"\b\d+[-_/\\]?[A-Za-z]+[A-Za-z0-9-_]*\b", "[SPEC]", cleaned_text)
+        cleaned_text = re.sub(r"\b[A-Za-z0-9]+-[A-Za-z0-9]+-[A-Za-z0-9]+\b", "[MODEL_COMPLEX]", cleaned_text)
+
+        # 4. Mask bullet item numbers (e.g. "1.", "2.", "•")
+        cleaned_text = re.sub(r"(?:^|\n)\s*\d+\.\s+", "\n", cleaned_text)
+
+        # 5. Extract monetary and numerical values
         pattern = r"(?:₹|\$|Rs\.?\s*|RS\s*)?(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)(%|\b)?"
         matches = re.finditer(pattern, cleaned_text)
         
@@ -49,9 +63,8 @@ class ProvenanceValidator:
                 continue
             try:
                 val = float(num_str)
+                # Percentages like 5%, 10% are verified or treated as rate
                 if is_percent:
-                    continue
-                if num_str in cls.EXPLICIT_IGNORES and val < 100 and not ("₹" in raw or "$" in raw or "Rs" in raw or "RS" in raw):
                     continue
                 extracted.append((raw, round(val, 2)))
             except ValueError:

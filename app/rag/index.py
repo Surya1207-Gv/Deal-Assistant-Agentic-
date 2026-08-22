@@ -11,8 +11,8 @@ class DataIndex:
     _loaded: bool = False
 
     @classmethod
-    def load_all(cls):
-        if cls._loaded:
+    def load_all(cls, force: bool = False):
+        if cls._loaded and not force:
             return
 
         deals_file = DATA_DIR / "deals.json"
