@@ -10,6 +10,7 @@ is which alternatives are in scope and how the result is narrated — never the 
 """
 
 from __future__ import annotations
+import dataclasses
 import math
 from typing import Dict, Any, List, Optional, Tuple
 
@@ -120,7 +121,7 @@ def _rate_card_response(state: Dict[str, Any], cards: List[Dict[str, Any]], cate
     for c in cards:
         cid = c["card_id"]
         cits.append(cid)
-        pct = float(c.get("base_rate", 0.01)) * float(c.get("category_multipliers", {}).get(category, 1.0)) * 100
+        pct = RewardEngine.effective_rate(c, category) * 100
         trace.append(Value(amount=pct, provenance=Provenance.SOURCE, record_id=f"{cid}_{category}_rate"))
         lines.append(f"• {c.get('name', cid)}: {pct:g}% reward rate on {category}")
     draft = "\n".join(lines) + "\nPlease provide a spend amount to calculate exact monetary savings."
@@ -225,24 +226,32 @@ def _explain_comparison_lines(thread) -> List[str]:
         return []
 
     axis = memo.get("axis", "option")
+    metric = memo.get("metric", "effective_price")
     subject = memo.get("product_name")
     lines = [
         f"That comparison was across {axis}s"
         + (f" for {subject}" if subject and axis != "product" else "")
-        + ", ranked by effective final price:"
+        + f", ranked by {_METRIC_HEADING.get(metric, 'effective final price')}:"
     ]
     for r in rows:
         lines.append("• " + _comparison_row_text(r))
 
     winner_key = memo.get("winner_key")
+    if winner_key is None:
+        # No winner was chosen, because the objective was never stated and the readings
+        # disagreed. Do not invent one now.
+        lines.append("No single option was best: the answer depended on what you were "
+                     "optimising for.")
+        return lines
+
+    key = _METRIC_ROW_KEY.get(metric, "effective_price")
     winner = next((r for r in rows if r.get("key") == winner_key), None)
     loser = next((r for r in rows if r.get("key") != winner_key), None)
     if winner and loser:
-        delta = loser["effective_price"] - winner["effective_price"]
+        delta = abs(loser.get(key, 0.0) - winner.get(key, 0.0))
         if delta > 0.01:
-            lines.append(
-                f"{winner['label']} won by RS {delta:,.0f} on effective final price."
-            )
+            lines.append(f"{winner['label']} won by RS {delta:,.0f} on "
+                         f"{_METRIC_HEADING.get(metric, 'effective final price')}.")
         else:
             lines.append(f"{winner['label']} and {loser['label']} came out level.")
     return lines
@@ -660,6 +669,18 @@ def handle_list(resolved: ResolvedQuery, state: Dict[str, Any]) -> Dict[str, Any
         product=resolved.products[0] if resolved.products else None
     )
 
+    # A listing scoped to a PRODUCT is only about places that sell it. Category scoping alone
+    # let an offer from a merchant that does not carry the product appear under "deals for
+    # <product>" — a silent merchant introduction in listing form. Merchant-agnostic deals
+    # stay. Derived from the product's own price map, so it holds for any catalogue.
+    if resolved.products and not resolved.merchants:
+        sellers = {m.lower() for m in (resolved.products[0].get("prices") or {})}
+        if sellers:
+            matched_deals = [
+                d for d in matched_deals
+                if not d.get("merchant") or d["merchant"].lower() in sellers
+            ]
+
     if not matched_deals:
         return handle_abstain(resolved, state)
 
@@ -806,6 +827,79 @@ def handle_eligibility(resolved: ResolvedQuery, state: Dict[str, Any]) -> Dict[s
                  product_names=_catalog_text(resolved.deals, resolved.cards, resolved.products))
 
 
+# How each ranking metric reads when a comparison is summarised under it.
+_VIEW_LABEL = {
+    "effective_price": "Lowest effective price",
+    "reward": "Most cashback",
+    "discount": "Largest discount",
+}
+
+# How a comparison READS under each metric. The ranking already followed the objective; the
+# narration did not, so a reward comparison was correctly ranked by reward and then described
+# with an effective-price verdict — the right answer explained in the wrong terms.
+_METRIC_HEADING = {
+    "effective_price": "effective final price",
+    "reward": "cashback earned",
+    "discount": "discount applied",
+}
+_METRIC_ROW_KEY = {
+    "effective_price": "effective_price",
+    "reward": "reward",
+    "discount": "discount",
+}
+# How each metric is named when asking which the user prioritises.
+_METRIC_PRIORITY = {
+    "effective_price": "the lowest final price",
+    "reward": "cashback",
+    "discount": "discount",
+}
+
+
+def _metric_verdict(metric: str, winner_label: str, loser_label: str,
+                    winner_value: float, loser_value: float) -> str:
+    delta = abs(winner_value - loser_value)
+    if delta < 0.01:
+        return f"{winner_label} and {loser_label} come out level at RS {winner_value:,.0f}."
+    if metric == "reward":
+        return (f"{winner_label} earns RS {delta:,.0f} more than {loser_label} "
+                f"(RS {winner_value:,.0f} vs RS {loser_value:,.0f}).")
+    if metric == "discount":
+        return (f"{winner_label} discounts RS {delta:,.0f} more than {loser_label} "
+                f"(RS {winner_value:,.0f} vs RS {loser_value:,.0f}).")
+    return (f"{winner_label} is cheaper than {loser_label} by RS {delta:,.0f} "
+            f"(RS {winner_value:,.0f} vs RS {loser_value:,.0f}).")
+
+
+def _ranking_view(frame, options, axis: str, metric: str):
+    """
+    Rank the SAME payment options under one metric.
+
+    Re-ranking only: the options were already costed by the engine, and every metric reads a
+    field those options already carry. Nothing is recomputed, so two views can never disagree
+    about a figure — only about which figure matters.
+    """
+    view_frame = dataclasses.replace(frame, metric=metric)
+    candidates = build_candidates(view_frame, axis, options)
+    if not candidates:
+        return [], "", frozenset()
+
+    extractor, _descending = RewardEngine.METRICS[metric]
+    top = extractor(candidates[0].option)
+    joint = [c for c in candidates if abs(extractor(c.option) - top) < 0.01]
+
+    if len(joint) > 1:
+        names = " and ".join(c.label for c in joint)
+        summary = f"{names} tie at RS {top:,.0f}"
+    elif len(candidates) > 1:
+        runner = candidates[1]
+        summary = (f"{candidates[0].label} at RS {top:,.0f} "
+                   f"(vs {runner.label} RS {extractor(runner.option):,.0f})")
+    else:
+        summary = f"{candidates[0].label} at RS {top:,.0f}"
+
+    return candidates, summary, frozenset(c.key for c in joint)
+
+
 def _comparison_axis_for(resolved: ResolvedQuery, frame) -> str:
     """
     Which dimension the user is actually comparing.
@@ -873,26 +967,85 @@ def handle_compare(resolved: ResolvedQuery, state: Dict[str, Any]) -> Dict[str, 
         state["comparison_candidates"] = candidates
         return state
 
+    # AMBIGUOUS COMPARISON.
+    #
+    # "A or B for this purchase?" names the alternatives but not what makes one better. The
+    # objective then falls back to a default, and the default silently decides the answer —
+    # which is only harmless while the metrics agree. They frequently do not: a card can earn
+    # LESS cashback and still leave you paying less, because it unlocks a larger merchant
+    # discount. Reporting one ranking as "the" answer, with the other metric visible in the
+    # same table pointing the other way, is worse than saying nothing.
+    #
+    # So when the user never stated an objective, rank the same options both ways. If the
+    # readings agree there is no ambiguity and the answer proceeds normally; if they disagree,
+    # both are reported and neither is presented as the winner. Generic across axes and
+    # metrics, and triggered by the DATA disagreeing rather than by any phrasing.
+    if getattr(resolved, "objective_source", "explicit") == "default":
+        # Rank the SAME options under each meaningful metric. Only the ordering changes:
+        # entities, merchant, card, product and amount all come from the one frame, so a
+        # different metric can never quietly become a different question.
+        views = []
+        for metric in ("effective_price", "reward", "discount"):
+            cands, summary, winners = _ranking_view(frame, options, axis, metric)
+            if cands:
+                views.append((metric, cands, summary, winners))
+
+        # Ambiguous exactly when the metrics do not agree on who wins. When they agree there
+        # is nothing to ask about and a single verdict is honest.
+        if len(views) > 1 and len({w for _m, _c, _s, w in views}) > 1:
+            lines = ["You did not say which of these matters, and they do not agree:"]
+            for metric, _cands, summary, _w in views:
+                lines.append(f"• {_VIEW_LABEL.get(metric, metric)}: {summary}.")
+            priorities = ", ".join(_METRIC_PRIORITY[m] for m, _c, _s, _w in views[:-1])
+            lines.append(f"There is no single best choice unless you tell me whether you "
+                         f"prioritise {priorities} or {_METRIC_PRIORITY[views[-1][0]]}.")
+            lines.append("Each option in full:")
+            for c in candidates:
+                lines.append("• " + _comparison_row_text(c.row()))
+
+            all_cands = [c for _m, cs, _s, _w in views for c in cs]
+            citations, trace = merged_evidence(all_cands)
+
+            thread = _thread_of(resolved, state)
+            if thread is not None:
+                thread.record_comparison(
+                    axis=axis,
+                    rows=[c.row() for c in candidates],
+                    winner_key=None,          # no winner was chosen, and none is invented
+                    product_name=frame.product["name"] if frame.product else None,
+                    trace=trace,
+                    citations=citations,
+                )
+
+            _record_winner(state, candidates[0].option, candidates[1].option, options)
+            state["comparison_axis"] = axis
+            state["comparison_candidates"] = candidates
+            state["comparison_ambiguous"] = [
+                {"metric": m, "summary": sm, "winners": sorted(w)} for m, _c, sm, w in views
+            ]
+            state["skip_planning"] = True
+            draft = "\n".join(lines) + f"\nCitations: {citations}"
+            return _emit(state, draft, citations, trace, validate=True,
+                         product_names=[p["name"] for p in frame.products])
+
     winner = candidates[0]
     runner_up = candidates[1]
-    delta = runner_up.effective_price - winner.effective_price
+    # The verdict is stated in the units the ranking used, not always in rupees-paid.
+    _extract, _desc = RewardEngine.METRICS.get(frame.metric, RewardEngine.METRICS["effective_price"])
+    winner_value = _extract(winner.option)
+    runner_value = _extract(runner_up.option)
+    delta = abs(runner_value - winner_value)
 
     # When the axis IS the product, naming one product as "the subject" would be wrong —
     # the products are the alternatives, not the context.
     subject = "" if axis == "product" else f" for {frame.describe_subject()}"
-    lines = [f"Comparison across {axis}s{subject}, ranked by effective final price:"]
+    heading = _METRIC_HEADING.get(frame.metric, "effective final price")
+    lines = [f"Comparison across {axis}s{subject}, ranked by {heading}:"]
     for c in candidates:
         lines.append("• " + _comparison_row_text(c.row()))
 
-    if delta > 0.01:
-        lines.append(
-            f"{winner.label} is cheaper than {runner_up.label} by RS {delta:,.0f} "
-            f"(RS {winner.effective_price:,.0f} vs RS {runner_up.effective_price:,.0f})."
-        )
-    else:
-        lines.append(
-            f"{winner.label} and {runner_up.label} come out level at RS {winner.effective_price:,.0f}."
-        )
+    lines.append(_metric_verdict(frame.metric, winner.label, runner_up.label,
+                                 winner_value, runner_value))
 
     citations, trace = merged_evidence(candidates)
     trace = list(trace) + [
@@ -909,6 +1062,7 @@ def handle_compare(resolved: ResolvedQuery, state: Dict[str, Any]) -> Dict[str, 
             rows=[c.row() for c in candidates],
             winner_key=winner.key,
             product_name=frame.product["name"] if frame.product else None,
+            metric=frame.metric,
             trace=trace,
             citations=citations,
         )

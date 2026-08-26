@@ -48,16 +48,19 @@ class Objective(str, Enum):
 
 # Minimising what you actually pay.
 PRICE_OBJECTIVE_RE = re.compile(
-    r"\bcheap(?:est|er|ly)?\b|\bbest\s+price\b|\blowest\s+(?:price|cost|total|effective)\b|"
+    r"\bcheap(?:er|est|ly)?\b|\bbest\s+price\b|"
+    r"\blowest\s+(?:\w+\s+)?(?:price|cost|total|effective|amount)\b|"
     r"\bpay\s+(?:the\s+)?least\b|\bleast\s+(?:expensive|amount)\b|\bminimi[sz]e\b|"
-    r"\bpay\s+less\b|\bspend\s+(?:the\s+)?least\b"
+    r"\bpay\s+less\b|\bspend\s+(?:the\s+)?least\b|\bcosts?\s+(?:me\s+)?(?:the\s+)?least\b|"
+    r"\b(?:save|saves|saving)\s+(?:me\s+)?(?:the\s+)?most\s+money\b"
 )
 
 # Maximising what the CARD pays back.
 REWARD_OBJECTIVE_RE = re.compile(
-    r"\bcashback\b|\brewards?\b|\brewarding\b|\bpoints\b|\bearns?\b|\bearning\b|\breward\s+rate\b|"
+    r"\bcashback\b|\bcash\s+back\b|\brewards?\b|\brewarding\b|\bpoints\b|\bearns?\b|\bearning\b|"
+    r"\breward\s+rate\b|\bmoney\s+back\b|\b(?:best|biggest|highest|most)\s+return\b|"
     r"\b(?:best|which|what|right)\s+card\b|\bcard\s+(?:should|would|to\s+use|is\s+best|gives)\b|"
-    r"\bcard\s+for\b"
+    r"\bcard\s+for\b|\bpayment\s+option\s+gives\b"
 )
 
 # Maximising the merchant discount itself.
@@ -113,6 +116,10 @@ class ResolvedQuery:
     # What the user is optimising for. Drives the ranking metric and whether merchant
     # promotions may enter the calculation.
     objective: str = Objective.MIN_EFFECTIVE_PRICE.value
+    # Where the objective came from: "explicit" (this turn's words), "inherited" (explicit
+    # earlier in the thread) or "default" (nobody ever said). Only "default" is ambiguous,
+    # and a comparison must not silently pick a ranking metric when it is.
+    objective_source: str = "default"
     # True only for a genuine reward question ("how much cashback on X?"), which is answered
     # from card rules alone rather than by stacking an unrequested merchant coupon.
     reward_question: bool = False
@@ -597,27 +604,18 @@ class QueryResolver:
         # deals (spec section 19). It is deliberately NOT inferred from "no product
         # matched": "buy groceries worth RS 4,000" names no catalog product yet is plainly
         # a purchase, and treating it as a reward question hid every grocery deal from it.
-        # Reward vocabulary is tested with the matched CARD NAMES removed: several cards are
-        # literally called "... Cashback ...", so "use SBI Cashback instead" would otherwise
-        # read as a cashback question purely because of the card's brand name.
-        q_low_wo_cards = q_low
-        for _c in matched_cards:
-            for _w in re.findall(r"[a-z]+", _c.get("name", "").lower()):
-                if len(_w) > 2:
-                    q_low_wo_cards = re.sub(r"\b" + re.escape(_w) + r"\b", " ", q_low_wo_cards)
-
         # OBJECTIVE. Resolved before money is classified, because what the user is
-        # optimising for decides whether a figure is a spend to be rewarded or a purchase
-        # to be discounted. An objective the turn does not state is inherited from the
-        # The active thread is needed before the objective can be resolved (an unstated
-        # objective is inherited from it), so it is bound here rather than at the merge below.
+        # optimising for decides whether a figure is a spend to be rewarded or a purchase to
+        # be discounted. An objective the turn does not state is inherited from the thread,
+        # so a follow-up keeps optimising for the same thing.
+        #
+        # The active thread is needed first (it supplies an unstated objective), and the
+        # objective is read from text with the matched card MENTIONS masked out — see
+        # _mask_card_mentions for why that masking has to be span-based.
         thread = sess_for_anaphora.thread if sess_for_anaphora else ConversationThread()
-
-        # thread, so a follow-up keeps optimising for the same thing.
-        # Resolved on the CARD-NAME-STRIPPED text: several cards are literally called
-        # "... Cashback ...", so "buy X using SBI Cashback card" would otherwise read as a
-        # cashback question purely because of the card's brand name.
-        objective = cls._resolve_objective(q_low_wo_cards, thread)
+        q_low_wo_cards = cls._mask_card_mentions(q_low, matched_cards)
+        waived_dimensions = cls._waived_dimensions(q_low)
+        objective, objective_source = cls._resolve_objective(q_low_wo_cards, thread)
         reward_question = objective == Objective.MAX_REWARD.value
 
         if any(w in q_low for w in ["budget", "want to spend", "planning to spend"]):
@@ -673,7 +671,10 @@ class QueryResolver:
         if clear_budget:
             thread.clear_budget_dimension()
         inherited_map = thread.merge_turn(turn_ents, continuity, persistent_card=persistent_card)
-        thread.active_objective = objective
+        # Only an EXPLICIT objective becomes sticky. Persisting an assumed one would make the
+        # assumption look like intent on every later turn.
+        if objective_source == "explicit":
+            thread.active_objective = objective
 
         # Project the merged thread back onto this turn's resolved entities. Only
         # dimensions the turn did NOT state are filled in from context.
@@ -683,7 +684,8 @@ class QueryResolver:
                 matched_products.append(_p)
                 inherited_product = True
 
-        if inherited_map["merchant"] and thread.active_merchant and not matched_merchants:
+        if (inherited_map["merchant"] and thread.active_merchant and not matched_merchants
+                and "merchant" not in waived_dimensions):
             # Only inherit a merchant that can actually price the active product;
             # otherwise leave it open so the optimizer considers every valid merchant.
             _prod = matched_products[0] if matched_products else None
@@ -691,7 +693,8 @@ class QueryResolver:
             if not _prod or thread.active_merchant.lower() in _prices:
                 matched_merchants.append(thread.active_merchant)
 
-        if inherited_map["card"] and thread.active_card and not matched_cards and not clear_preference:
+        if (inherited_map["card"] and thread.active_card and not matched_cards
+                and not clear_preference and "card" not in waived_dimensions):
             _c = DataIndex.get_card_by_id(thread.active_card)
             if _c:
                 matched_cards.append(_c)
@@ -924,6 +927,14 @@ class QueryResolver:
             constraints["comparison_axis"] = thread.comparison_axis
             constraints["comparison_entities"] = list(thread.comparison_entities)
 
+        # A dimension the user has just waived carries no constraint this turn. The standing
+        # preference itself is untouched — it applies again on the next turn that does not
+        # waive it, and only an explicit clear directive removes it for good.
+        if "card" in waived_dimensions:
+            constraints.pop("preferred_card", None)
+        if "merchant" in waived_dimensions:
+            constraints.pop("named_merchant", None)
+
         # clear_preference / clear_budget were already computed in step 4b (negation
         # detection needs to happen before follow-up inheritance, not after it).
         if clear_preference:
@@ -1122,11 +1133,58 @@ class QueryResolver:
             clarification=clarification,
             thread=thread,
             objective=objective,
+            objective_source=objective_source,
             reward_question=reward_question,
             comparison_axis=thread.comparison_axis,
             comparison_entities=list(thread.comparison_entities),
             classification_source=classification_source,
         )
+
+    @classmethod
+    def _mask_card_mentions(cls, q_low: str, matched_cards: List[Dict[str, Any]]) -> str:
+        """
+        Blank out where a matched card is NAMED, so brand words are not mistaken for the
+        user's own vocabulary.
+
+        Several cards are literally called "... Cashback ...", so a card's brand would
+        otherwise make any sentence mentioning it look like a cashback question. The previous
+        masking removed every occurrence of every word in the card's name — which deleted the
+        user's OWN word too. In
+
+            "What cashback would I get on a RS 10,000 grocery purchase with SBI Cashback?"
+
+        it deleted both occurrences of "cashback", leaving no reward vocabulary at all, so the
+        turn resolved as a price question. The candidate builder then correctly honoured that
+        frame and admitted a merchant coupon the user never asked for: the frame was already
+        wrong before any downstream stage saw it.
+
+        Masking is therefore SPAN-based. For each matched card, remove the single longest
+        contiguous mention of that card and nothing else. Multi-word spans are tried longest
+        first; a lone word is removed only when it uniquely identifies that card by itself, so
+        a generic brand word such as "cashback" or "card" is never removed on its own.
+        """
+        alias_map = VocabularyIndex.get_card_alias_map()
+        text = q_low
+        for card in matched_cards:
+            card_id = (card.get("card_id") or "").lower()
+            tokens = re.findall(r"[a-z0-9]+", (card.get("name") or "").lower())
+
+            phrases: List[str] = [card_id] if card_id else []
+            for size in range(len(tokens), 1, -1):
+                for start in range(0, len(tokens) - size + 1):
+                    phrases.append(" ".join(tokens[start:start + size]))
+            phrases += [t for t in tokens if alias_map.get(t) == card_id]
+
+            for phrase in phrases:
+                parts = phrase.split()
+                if not parts:
+                    continue
+                pattern = r"\b" + r"\s+".join(re.escape(t) for t in parts) + r"\b"
+                masked, hits = re.subn(pattern, " ", text, count=1)
+                if hits:
+                    text = masked
+                    break
+        return text
 
     # ------------------------------------------------------------------ money parsing
     @classmethod
@@ -1194,6 +1252,29 @@ class QueryResolver:
 
     # ------------------------------------------------------------------ objective
     @classmethod
+    def _waived_dimensions(cls, q_low: str) -> Set[str]:
+        """
+        Which dimensions the user has explicitly said they do not care about.
+
+        Indifference was already recognised well enough to stop "I don't care which card I
+        use" reading as a reward question. But recognising it there and doing nothing with it
+        left the constraint in place: a card the user had preferred EARLIER still pinned the
+        answer on a turn where they had just said any card would do. Saying a dimension does
+        not matter releases the constraint on it for this turn, while leaving the standing
+        preference intact — clearing that permanently needs an explicit "forget".
+        """
+        waived: Set[str] = set()
+        for match in INDIFFERENCE_RE.finditer(q_low):
+            span = match.group(0)
+            if re.search(r"\bcards?\b", span):
+                waived.add("card")
+            if re.search(r"\b(?:merchants?|stores?|sellers?)\b", span):
+                waived.add("merchant")
+            if re.search(r"\bdeals?\b", span):
+                waived.add("deal")
+        return waived
+
+    @classmethod
     def _resolve_objective(cls, q_low: str, thread: ConversationThread) -> str:
         """
         What is the user optimising for?
@@ -1203,16 +1284,22 @@ class QueryResolver:
         card is one of the variables. Otherwise a request about the discount itself, then a
         request about what the card pays back. A turn that states no objective inherits the
         one already in play, so a follow-up keeps optimising for the same thing.
+
+        Returns (objective, source). The SOURCE matters: an objective nobody ever stated is an
+        assumption, and an assumption must not quietly decide a comparison whose answer
+        changes with the metric.
         """
         q_low = INDIFFERENCE_RE.sub(" ", q_low)
         if PRICE_OBJECTIVE_RE.search(q_low):
-            return Objective.MIN_EFFECTIVE_PRICE.value
+            return Objective.MIN_EFFECTIVE_PRICE.value, "explicit"
         if DISCOUNT_OBJECTIVE_RE.search(q_low):
-            return Objective.MAX_DISCOUNT.value
+            return Objective.MAX_DISCOUNT.value, "explicit"
         if REWARD_OBJECTIVE_RE.search(q_low):
-            return Objective.MAX_REWARD.value
+            return Objective.MAX_REWARD.value, "explicit"
         inherited = getattr(thread, "active_objective", None)
-        return inherited or Objective.MIN_EFFECTIVE_PRICE.value
+        if inherited:
+            return inherited, "inherited"
+        return Objective.MIN_EFFECTIVE_PRICE.value, "default"
 
     # ------------------------------------------------------------------ structural rules
     @classmethod

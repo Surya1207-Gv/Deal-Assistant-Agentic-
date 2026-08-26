@@ -12,6 +12,7 @@ class AgentState(TypedDict, total=False):
     budget: Optional[float]
     preferred_card: Optional[str]
     conversation_state: Dict[str, Any]
+    category_preferences: Dict[str, str]
     spend_to_date: Dict[str, float]
     
     # Query Resolution state
@@ -52,6 +53,10 @@ class AgentState(TypedDict, total=False):
     # was costed rather than only the winner.
     comparison_axis: Optional[str]
     comparison_candidates: List[Any]
+    # Set when a comparison's objective was never stated AND the ranking metrics disagree:
+    # each reading with its own winner, so the answer can present both instead of silently
+    # choosing one. Declared here because LangGraph carries only declared channels.
+    comparison_ambiguous: List[Dict[str, Any]]
     # Visible deals the candidate space declined, with the reason. A report over the
     # candidate space — never an input to it.
     rejected_visible_deals: List[Any]

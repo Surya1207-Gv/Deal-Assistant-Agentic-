@@ -29,5 +29,1197 @@
       "get_reward_rules"
     ],
     "planner_mode": "llm"
+  },
+  "45f125dda943e23125473e6c516dca8c": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "1fec609715acfb8e28dca8b77a288e57": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "9d0e0e9d1e9cdb092adacd218c5b53f2": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "5065ae62569af5b33c9f09aa5bb0742e": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "663e5bf2c5dea5e70af2af2a76b30e30": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "294318f70d615fb6c57f888a65e5337f": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "e19f05d1ac7ec379a70db755f79819b7": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "f269998bb829703da8a503fdc073fe4d": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "3637cee7746180ed134752243d7b754d": {
+    "planned_tools": [
+      "search_deals"
+    ],
+    "planner_mode": "llm"
+  },
+  "e4c5fad5d76b237fdb32b5f354202fc2": {
+    "planned_tools": [
+      "search_deals"
+    ],
+    "planner_mode": "llm"
+  },
+  "ede0477734ae0b43f1e04e7f9ae943b5": {
+    "planned_tools": [
+      "search_deals"
+    ],
+    "planner_mode": "llm"
+  },
+  "b572e2dae5921d251552cb83536303cc": {
+    "planned_tools": [
+      "best_card",
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "54fb0c431010cfd58fbbbb88278dba11": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "771253ff55a198bdac8fc4de57552fda": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "86cf54d70f26db76376bdd1d7a86a8e1": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "1ef083a41c61a1bf0502ef8777b423d4": {
+    "planned_tools": [
+      "compare_prices"
+    ],
+    "planner_mode": "llm"
+  },
+  "cdb4efe4424931f95900d775b38fa08d": {
+    "planned_tools": [
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "cec217968faf0ac33d0872136d66ce18": {
+    "planned_tools": [
+      "search_deals",
+      "best_card",
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "16c888342d8b33089cc8f0a7afbe31da": {
+    "planned_tools": [
+      "search_deals"
+    ],
+    "planner_mode": "llm"
+  },
+  "17f37431694ef0645c0ce9594aba5c07": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "81b16dcb75348ae3c9cddc773c5435a7": {
+    "planned_tools": [
+      "search_deals"
+    ],
+    "planner_mode": "llm"
+  },
+  "64e6520ce0b1f6b7eb417873d7f149ed": {
+    "planned_tools": [
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "635ce33319dfa4a764413ef813046ce5": {
+    "planned_tools": [
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "ef2ba37ab6427909a1fb8d58a7ec4253": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "248d53d909060eeb72a04fb116b6b326": {
+    "planned_tools": [
+      "search_deals"
+    ],
+    "planner_mode": "llm"
+  },
+  "7f2bef2ffe6095c468ffeb631b6968fc": {
+    "planned_tools": [
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "89b89546d084522ce1ef9fc66745e63b": {
+    "planned_tools": [
+      "search_deals",
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "3ea8ea4db055926372c14003dfa563d2": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "564a2654c00b320c668a5b089d3ebef6": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "0a5c916deef6008b90779f8d582cbdf1": {
+    "planned_tools": [
+      "watch_price"
+    ],
+    "planner_mode": "llm"
+  },
+  "ea1653c704cdc6d7bc754b4f9a26daae": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "e96454ac7ddc34e0ad92f9752388dafa": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "dc8abf2c8e798bf1cdb6a92fef34db62": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "399af73bb1215f5a882c1e628528f804": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "2f4c6bd5cf359a6e63a9d3f2b9095124": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "1e5b3631952ae1883296d49e196cd754": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "265190fd77973bf8215f0d2c37488cf9": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "772a2eca2965e4babaa394c0d9d319ac": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "0c46436da904660fc5c5ea5738bbcab2": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "676744ee2c92fdcf24e791246ec0010d": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "1f2836f2c6e6d1ff72af8ae26e3d861f": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "9eb026b58b603f1578c2ceaba25a1aca": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "cfc290aa2799635daa82b49f9e9e2129": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "d45d5bc3c71235d6ffc6a4f2c5202470": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "a4fa5a293c0b0a53fafa4676836d69d0": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "d062a3410d1e220e68fea84cf76cc886": {
+    "planned_tools": [
+      "search_deals"
+    ],
+    "planner_mode": "llm"
+  },
+  "65d26fc9bfa77d0c5abb705ec36d2f13": {
+    "planned_tools": [
+      "search_deals"
+    ],
+    "planner_mode": "llm"
+  },
+  "bdd745e438aebfdfe0e7964cc6f83254": {
+    "planned_tools": [
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "01b6fb55486b24ec93fd843c639e67c2": {
+    "planned_tools": [
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "82f9c12b2d6a58b520fc7f45d43fab65": {
+    "planned_tools": [
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "db26b42d33683deed51cfc064cb39871": {
+    "planned_tools": [
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "fc1280f9eefe788e5d2042693ecb6c98": {
+    "planned_tools": [
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "1bb2b4f815f6de598c0ef91a9258753e": {
+    "planned_tools": [
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "8266b57a1e8ddb160c882cf48597cd5b": {
+    "planned_tools": [
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "79b8725837f3ba9710ab798b06b2b977": {
+    "planned_tools": [
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "35c42cd1be0115e10af08a118d987892": {
+    "planned_tools": [
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "8a83b286e2a85cb697b2ece996eacf16": {
+    "planned_tools": [
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "5ada190494e01d342ec7ccd7412f60b9": {
+    "planned_tools": [
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "423c006c1f38e062c276bc8cb7b04798": {
+    "planned_tools": [
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "6723d2e75f9b4ebcba15222ceec26377": {
+    "planned_tools": [
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "73b406e3dec711bf4e16b60edc6c309d": {
+    "planned_tools": [
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "59c2c6ffebbf55990e7481ac1ec0da4c": {
+    "planned_tools": [
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "e7ebd1687619cd4df9639e4d04e717b6": {
+    "planned_tools": [
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "b84ef1e2d858d2a160320ec8bfad82b7": {
+    "planned_tools": [
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "b20f56c12f2d7eab03876833ccd84af4": {
+    "planned_tools": [
+      "search_deals",
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "3ee99e34e494940889f37f447e600377": {
+    "planned_tools": [
+      "search_deals",
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "533eed273f532d1d855bbabf817bd09a": {
+    "planned_tools": [
+      "search_deals",
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "9cb789e30779d4e434f9a8540ab737c4": {
+    "planned_tools": [
+      "search_deals",
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "abfb65902f6a92d15126cbe491e64d0a": {
+    "planned_tools": [
+      "search_deals",
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "d86a59ac2bf8b0ffa8f20270a64b0189": {
+    "planned_tools": [
+      "search_deals",
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "d88faface209234709492fd8296ff029": {
+    "planned_tools": [
+      "search_deals",
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "43f179c93a921d437294012301560602": {
+    "planned_tools": [
+      "search_deals",
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "a60eb3ec9d73c53fe5828ff9e4ee7f7b": {
+    "planned_tools": [
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "3e750386fa6f5591e22dbcd6f16f4258": {
+    "planned_tools": [
+      "search_deals"
+    ],
+    "planner_mode": "llm"
+  },
+  "0457e056a7e18ea2266d79384d526bab": {
+    "planned_tools": [
+      "search_deals"
+    ],
+    "planner_mode": "llm"
+  },
+  "c9de63a8002aad219a517542089a3594": {
+    "planned_tools": [
+      "search_deals"
+    ],
+    "planner_mode": "llm"
+  },
+  "57b400ed6bb4836663a508b1f10258f2": {
+    "planned_tools": [
+      "search_deals"
+    ],
+    "planner_mode": "llm"
+  },
+  "3dae396621f6be637c1d80444c656cb4": {
+    "planned_tools": [
+      "search_deals"
+    ],
+    "planner_mode": "llm"
+  },
+  "560bfb6a1ca436e3b072fefa00c9e4e1": {
+    "planned_tools": [
+      "search_deals"
+    ],
+    "planner_mode": "llm"
+  },
+  "a07242e04fe4f85834db71565251466c": {
+    "planned_tools": [
+      "search_deals"
+    ],
+    "planner_mode": "llm"
+  },
+  "56055f28e6e5fe44e1e9c75c7bc9db17": {
+    "planned_tools": [
+      "search_deals"
+    ],
+    "planner_mode": "llm"
+  },
+  "7f52f5d111eec05464906aaa7f910dd2": {
+    "planned_tools": [
+      "search_deals"
+    ],
+    "planner_mode": "llm"
+  },
+  "e9d6d906eff28e3253bc7165aad742ee": {
+    "planned_tools": [
+      "search_deals"
+    ],
+    "planner_mode": "llm"
+  },
+  "9a2931b0205fd110e74ae07ee33523d8": {
+    "planned_tools": [
+      "search_deals"
+    ],
+    "planner_mode": "llm"
+  },
+  "9effa4c88f1b0b0014de6e50d7645076": {
+    "planned_tools": [
+      "search_deals"
+    ],
+    "planner_mode": "llm"
+  },
+  "274e15bd39156fb2ca686be818ff4dec": {
+    "planned_tools": [
+      "search_deals"
+    ],
+    "planner_mode": "llm"
+  },
+  "fff0f9ac1caf0d53632b3785ea51b325": {
+    "planned_tools": [
+      "search_deals"
+    ],
+    "planner_mode": "llm"
+  },
+  "9eb04d81200bdf69f3b90f75b2c581ea": {
+    "planned_tools": [
+      "search_deals"
+    ],
+    "planner_mode": "llm"
+  },
+  "71cfa64a46e460f8163880d1409a8401": {
+    "planned_tools": [
+      "search_deals"
+    ],
+    "planner_mode": "llm"
+  },
+  "b52cf77fceafaa9c2896558705de818d": {
+    "planned_tools": [
+      "search_deals"
+    ],
+    "planner_mode": "llm"
+  },
+  "121e1a3f3ddc020e58b4a73035a7f430": {
+    "planned_tools": [
+      "search_deals"
+    ],
+    "planner_mode": "llm"
+  },
+  "a8f284b869ecebe7a7e134d44b52e845": {
+    "planned_tools": [
+      "search_deals"
+    ],
+    "planner_mode": "llm"
+  },
+  "a29c2795f4e96cb3f643da355e3d92bb": {
+    "planned_tools": [
+      "search_deals"
+    ],
+    "planner_mode": "llm"
+  },
+  "2b24ad4e1db1298d7d728ac1cc57fdc9": {
+    "planned_tools": [
+      "search_deals"
+    ],
+    "planner_mode": "llm"
+  },
+  "846841afe369ac42e5206985a5be2319": {
+    "planned_tools": [
+      "search_deals"
+    ],
+    "planner_mode": "llm"
+  },
+  "9c32c9f17332aad4cb0ea889ec40f2e0": {
+    "planned_tools": [
+      "search_deals"
+    ],
+    "planner_mode": "llm"
+  },
+  "264971d67575e3daaa8ac2852a5752b6": {
+    "planned_tools": [
+      "search_deals"
+    ],
+    "planner_mode": "llm"
+  },
+  "d184ead4936bdda077311a7bef51f928": {
+    "planned_tools": [
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "9422bde7ff4c027596c53a59a5f8525a": {
+    "planned_tools": [
+      "best_card",
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "761f1dc363684338af8a12913a64040c": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card",
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "6799def106e014f6290ee1edf45ff185": {
+    "planned_tools": [
+      "best_card",
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "18d6c99ee6a6c2bc545ea40f6ade7e66": {
+    "planned_tools": [
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "47a60fe0dcdaa643015646a13ca979a0": {
+    "planned_tools": [
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "cce38a9fdf91cc10e3f1b15245ce4590": {
+    "planned_tools": [
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "5ae3dd8564a2a3a7c1b1a949958d742b": {
+    "planned_tools": [
+      "best_card",
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "aab9823211b40d4c809a511bdd780cdd": {
+    "planned_tools": [
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "f11da42043d20721804f05a1209ad7be": {
+    "planned_tools": [
+      "compare_prices"
+    ],
+    "planner_mode": "llm"
+  },
+  "095a17d5d7f4623299ad910a6473b1b4": {
+    "planned_tools": [
+      "search_deals"
+    ],
+    "planner_mode": "llm"
+  },
+  "93b9f2684a023950ad95b099908653ea": {
+    "planned_tools": [],
+    "planner_mode": "llm"
+  },
+  "a5aad2512d7f2f009a4e2cb7b3c9173e": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "50e09b134cf2de36fd6f7d1eac7cb097": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "7b49d17ed05ad8776b5ca8b06f6236a1": {
+    "planned_tools": [
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "3e3cc5b110da3ad09d834452dadd1346": {
+    "planned_tools": [
+      "compare_prices"
+    ],
+    "planner_mode": "llm"
+  },
+  "f431083792a33ae24dfea21c4bb0a811": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals"
+    ],
+    "planner_mode": "llm"
+  },
+  "d55df98cdd4df698ea7d48e25316e96e": {
+    "planned_tools": [
+      "best_card",
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "7e6332636b796f4b7a3549c5b33292ac": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "ba34eb0edbead1a215682650f70a78a5": {
+    "planned_tools": [
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "4b1cf51ed2cb435e3dce021590b53335": {
+    "planned_tools": [
+      "search_deals",
+      "best_card",
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "cbb07ca909ff5317e0b9717fbb18b335": {
+    "planned_tools": [
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "37b67896342889474034d8fab6ad89c9": {
+    "planned_tools": [
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "598ceabf6e675d2ce7cb81093aed5682": {
+    "planned_tools": [],
+    "planner_mode": "llm"
+  },
+  "fcf885637a533e324c9685c5a79719c7": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "27cf5af2fe41915405010a97427eeec0": {
+    "planned_tools": [],
+    "planner_mode": "llm"
+  },
+  "fad5004d6399850a2c094a99c87902e1": {
+    "planned_tools": [
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "8a9cd48015461120022570e725bdb556": {
+    "planned_tools": [],
+    "planner_mode": "llm"
+  },
+  "20bb2e63961b3913f8acce59e8667f26": {
+    "planned_tools": [],
+    "planner_mode": "llm"
+  },
+  "a1de7c6f3d26182c8333bd2f9fe9de90": {
+    "planned_tools": [],
+    "planner_mode": "llm"
+  },
+  "626b2c5588508fcc6050ad9df76cb24c": {
+    "planned_tools": [
+      "best_card",
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "66f8c4eb32a8968ef12bc3ad3892fba2": {
+    "planned_tools": [
+      "search_deals",
+      "compare_prices"
+    ],
+    "planner_mode": "llm"
+  },
+  "2370a41519e37b98fd82326ea0d923db": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "04cd19adb44b9814db2f923584b58792": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "16e418392aa557f0b4eefcadac4fc8d1": {
+    "planned_tools": [
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "6f44b97c25462915e99f0a92d22b50da": {
+    "planned_tools": [
+      "search_deals"
+    ],
+    "planner_mode": "llm"
+  },
+  "296963a97b6b4c06148e677ff1d518bc": {
+    "planned_tools": [
+      "search_deals"
+    ],
+    "planner_mode": "llm"
+  },
+  "2dfecd62364b0fc9dba01dce0cc3bce6": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "d232c7f2c68274c3e606e825c01dc69a": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "fdc8d2d5cc1087cd0550037fafa945ea": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "01b8442720026559f03a9ea87d667804": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "2c821cd1a3c3bf074fc86ad0b6d22ee7": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "aa4345f8d8c8bce759e5be7ccfd20cbe": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "302c6f35995ae3d2920193a6bbf61703": {
+    "planned_tools": [
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "ee7a8141eef9a3cc08897972b3cd3370": {
+    "planned_tools": [
+      "search_deals"
+    ],
+    "planner_mode": "llm"
+  },
+  "1e033902693122a9fe74b0695d1a1acf": {
+    "planned_tools": [
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "d6cc77328536aa6541184ea9ef7d4745": {
+    "planned_tools": [
+      "compare_prices"
+    ],
+    "planner_mode": "llm"
+  },
+  "e654c96d2f101ab4e5b3f77d825421e5": {
+    "planned_tools": [
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "9ae21e8dbb7f8bd4bdb6a6325abb632d": {
+    "planned_tools": [
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "6863cd822e2009a90220f061a9f49817": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "a4444eea7f9887f36e5219470cc938cf": {
+    "planned_tools": [
+      "compare_prices"
+    ],
+    "planner_mode": "llm"
+  },
+  "a27c6b3d7773522706a2bd0103ef923a": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "91d19790a50fe21da7463773596311ef": {
+    "planned_tools": [
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "2f07285c0c14c35f07fc4c1257993d5e": {
+    "planned_tools": [
+      "best_card",
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "23990c45ce18eeee783225c9608365bb": {
+    "planned_tools": [
+      "best_card",
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "af9018eab5600ffd79a6ee72cd73e52d": {
+    "planned_tools": [
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "3017190b0d094dfa7cea3e36423d5144": {
+    "planned_tools": [
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "431d008e92b3117cd566ab9d6fd31b99": {
+    "planned_tools": [
+      "watch_price"
+    ],
+    "planner_mode": "llm"
+  },
+  "b9b669647b00ee59b1dd7b6255a189d5": {
+    "planned_tools": [
+      "search_deals"
+    ],
+    "planner_mode": "llm"
+  },
+  "a44a07bfab9907153027e39f6aa99da3": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "cc2c7192357ab21e13e751c81e499ee9": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "0a041ab20bdac0482fced9f88f8a7cf0": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "08445fc696168cf2abca8267bad63751": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "6744cfefd67da493063e09cb9f6e6fd9": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "b45060eb43dbac23082819ff5bd4ebe5": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "21e1952e2a2d7d292b781b97a9b894fc": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "a9f74f5ffc6f8d53d190f38e7cdfc023": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "1bebdc305a2f84c104ce29a06075a5bd": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "515f56147a650f849a4c2f3931c0eead": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "32a8599c0ae91fa25b3d98e9c21bc7e7": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "d46fa42baf5b757ca0cbcbb427f4d922": {
+    "planned_tools": [
+      "best_card",
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "163acc3b16b76dd3d4c87d25dcb8bd7e": {
+    "planned_tools": [
+      "best_card",
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "01b394d30a3fc1938da9733eec8ffa1f": {
+    "planned_tools": [
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "f004575c0af759027c64d5a6c6c2df68": {
+    "planned_tools": [
+      "best_card",
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "ffd7329d81d39f66997eabd536d14307": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "2cece0f7e35bda74acf6e2080610da32": {
+    "planned_tools": [
+      "compare_prices",
+      "search_deals",
+      "best_card"
+    ],
+    "planner_mode": "llm"
+  },
+  "3e2249d3d65a29df55826c3c71e3aa4d": {
+    "planned_tools": [
+      "compare_prices"
+    ],
+    "planner_mode": "llm"
+  },
+  "ec36c5eb7e8e615c282cc01bf4e252fc": {
+    "planned_tools": [
+      "best_card",
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
+  },
+  "9ab60d2f626cae1644dd8c1458d13860": {
+    "planned_tools": [
+      "best_card",
+      "get_reward_rules"
+    ],
+    "planner_mode": "llm"
   }
 }

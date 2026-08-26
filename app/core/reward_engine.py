@@ -59,6 +59,20 @@ class RewardEngine:
         return min(disc_val, max_disc)
 
     @staticmethod
+    def effective_rate(card: Dict[str, Any], category: str) -> float:
+        """
+        The reward rate a card applies in a category, as a fraction.
+
+        THE single definition. It was being recomputed inline wherever a rate had to be shown
+        or cross-checked, which is exactly the drift the one-formula rule exists to prevent.
+        """
+        if not card:
+            return 0.0
+        base = float(card.get("base_rate", 0.01) or 0.0)
+        multiplier = float((card.get("category_multipliers") or {}).get(category, 1.0))
+        return base * multiplier
+
+    @staticmethod
     def display_percentage(deal: Dict[str, Any]) -> float:
         """A percentage deal's rate rendered for display, from the same normalization."""
         d_val = float(deal.get("discount_value", 0.0) or 0.0)

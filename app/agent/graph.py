@@ -17,7 +17,7 @@ from app.agent.operations import execute_operation
 from app.rag.index import DataIndex
 from app.rag.retriever import HybridRetriever
 from app.rag.reranker import Reranker
-from app.core.reward_engine import PaymentOption
+from app.core.reward_engine import PaymentOption, RewardEngine
 from app.core.provenance import ProvenanceValidator, Value, Provenance
 from app.core.memory import MemoryManager
 from app.agent.candidates import merchant_display
@@ -195,7 +195,11 @@ def execute_tools_node(state: AgentState) -> AgentState:
                 tool_mapping["best_card"] = "evaluated card reward rates"
         elif tool == "get_reward_rules":
             cards = DataIndex.get_cards()
-            card_id = resolved.cards[0]["card_id"] if resolved and resolved.cards else (state.get("preferred_card") or (cards[0]["card_id"] if cards else None))
+            # No fallback to an arbitrary catalogue card: with nothing named and no
+            # preference, there is no card this question is about, and the corroboration
+            # step re-queries the tool for whichever card actually wins.
+            card_id = (resolved.cards[0]["card_id"] if resolved and resolved.cards
+                       else state.get("preferred_card"))
             if card_id:
                 res = get_reward_rules(card_id)
                 results["get_reward_rules"] = res
@@ -285,7 +289,7 @@ def corroborate_with_tools(state: AgentState, best_opt: Optional[PaymentOption])
             _wp = DataIndex.get_product_by_id(best_opt.product_id)
             if _wp and _wp.get("category"):
                 cat = _wp["category"]
-        expected = float(rr.get("base_rate", 0.0)) * float(rr.get("category_multipliers", {}).get(cat, 1.0))
+        expected = RewardEngine.effective_rate(rr, cat)
         applied = float(best_opt.reward_rate_applied or 0.0)
         # A rate of zero is legitimate when the card's own minimum spend was not met.
         record("get_reward_rules",
