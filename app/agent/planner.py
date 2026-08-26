@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import List, Tuple, Dict, Any
 from dotenv import load_dotenv
 
+from app.core.llm_gate import LLMGate
+
 warnings.filterwarnings("ignore", message=".*automatic function calling.*")
 warnings.filterwarnings("ignore", category=UserWarning, module="google.genai")
 
@@ -57,10 +59,10 @@ class Planner:
 
     @classmethod
     def is_llm_available(cls) -> bool:
-        api_key = os.environ.get("GEMINI_API_KEY")
-        if not api_key or len(api_key.strip()) < 10:
-            return False
-        return True
+        # Provider health is tracked process-wide by LLMGate, so a quota-exhausted or
+        # offline provider is discovered ONCE rather than re-probed on every turn by every
+        # call site. Planning then degrades to the deterministic tool order below.
+        return LLMGate.is_available()
 
     @classmethod
     def plan_tools(cls, query: str, context: Dict[str, Any]) -> Tuple[List[str], str]:
@@ -77,17 +79,13 @@ class Planner:
             return entry["planned_tools"], "llm"
 
         if not cls.is_llm_available():
-            err_msg = "GEMINI_API_KEY environment variable missing or invalid."
+            err_msg = LLMGate.last_error() or "LLM provider unavailable."
             if os.environ.get("STRICT_LLM_DEMO") == "true":
                 raise RuntimeError(f"DEMO ABORTED: LLM unavailable — {err_msg}")
             print(f"WARNING: LLM unavailable, using fixed tool order. REASON: {err_msg}", file=sys.stderr)
-            return cls._deterministic_plan(query_clean), "deterministic-fallback"
+            return cls._deterministic_plan(query_clean, context), "deterministic-fallback"
 
         try:
-            from google import genai
-            api_key = os.environ.get("GEMINI_API_KEY")
-            client = genai.Client(api_key=api_key)
-
             prompt = (
                 f"You are the Deal Assistant Planner.\n"
                 f"Given the user request, return a JSON object with key 'planned_tools' containing\n"
@@ -109,32 +107,39 @@ class Planner:
                 f"Return JSON ONLY."
             )
 
-            last_exception = None
+            # One call through the shared gate: it owns the candidate-model chain and marks
+            # the provider unhealthy on failure, so an outage costs one attempt per cooldown
+            # window rather than one attempt per model per turn.
+            cls.llm_calls += 1
+            text = LLMGate.generate(prompt) or ""
+            json_match = re.search(r"\{.*\}", text, re.DOTALL) if text else None
+            if json_match:
+                data = json.loads(json_match.group(0))
+                tools = data.get("planned_tools", [])
+                if isinstance(tools, list):
+                    resolved = context.get("resolved_query") if context else None
+                    if resolved:
+                        op_allowed = {
+                            "LIST": ["search_deals"],
+                            "LOOKUP": ["compare_prices", "get_reward_rules", "search_deals"],
+                            "AGGREGATE": ["search_deals", "compare_prices"],
+                            "COMPUTE": ["best_card", "get_reward_rules", "search_deals"],
+                            "OPTIMIZE": ["compare_prices", "search_deals", "best_card", "get_reward_rules"],
+                            "COMPARE": ["compare_prices", "search_deals", "best_card", "get_reward_rules"],
+                            "ELIGIBILITY": ["get_reward_rules", "search_deals"],
+                            "WATCH": ["watch_price"],
+                            "CLARIFY": [],
+                            "EXPLAIN": [],
+                            "STATE": [],
+                            "ABSTAIN": []
+                        }
+                        allowed = op_allowed.get(resolved.operation.value, ["compare_prices", "search_deals", "best_card"])
+                        tools = [t for t in tools if t in allowed]
+                    cache[q_hash] = {"planned_tools": tools, "planner_mode": "llm"}
+                    cls._save_cache(cache)
+                    return tools, "llm"
 
-            # Retry loop across candidate models
-            for model_name in cls.CANDIDATE_MODELS:
-                for retry in range(2):
-                    try:
-                        cls.llm_calls += 1
-                        response = client.models.generate_content(
-                            model=model_name,
-                            contents=prompt,
-                        )
-                        text = response.text or ""
-                        json_match = re.search(r"\{.*\}", text, re.DOTALL)
-                        if json_match:
-                            data = json.loads(json_match.group(0))
-                            tools = data.get("planned_tools", [])
-                            if isinstance(tools, list):
-                                res_tools, res_mode = tools, "llm"
-                                cache[q_hash] = {"planned_tools": res_tools, "planner_mode": "llm"}
-                                cls._save_cache(cache)
-                                return res_tools, res_mode
-                        break
-                    except Exception as e:
-                        last_exception = e
-                        break
-
+            last_exception = LLMGate.last_error()
             if os.environ.get("STRICT_LLM_DEMO") == "true":
                 raise RuntimeError(f"DEMO ABORTED: LLM unavailable — {last_exception}")
             print(f"WARNING: LLM unavailable, using fixed tool order. REASON: {last_exception}", file=sys.stderr)
@@ -143,34 +148,55 @@ class Planner:
                 raise RuntimeError(f"DEMO ABORTED: LLM unavailable — {e}")
             print(f"WARNING: LLM unavailable, using fixed tool order. REASON: {e}", file=sys.stderr)
 
-        plan = cls._deterministic_plan(query_clean)
+        plan = cls._deterministic_plan(query_clean, context)
         return plan, "deterministic-fallback"
 
+    # Default tool set per resolved operation. Consulted BEFORE the keyword rules below,
+    # because the resolver has already interpreted the turn against the conversation
+    # thread — re-guessing intent from the raw text here would let the planner disagree
+    # with the operation actually being executed.
+    OPERATION_PLANS = {
+        "WATCH": ["watch_price"],
+        "LIST": ["search_deals"],
+        "AGGREGATE": ["search_deals"],
+        "LOOKUP": ["compare_prices", "get_reward_rules"],
+        "ELIGIBILITY": ["get_reward_rules", "search_deals"],
+        "STATE": [],
+        "CLARIFY": [],
+        "EXPLAIN": [],
+        "ABSTAIN": [],
+    }
+
     @classmethod
-    def _deterministic_plan(cls, q_lower: str) -> List[str]:
-        # Memory Updates
-        if ("prefer" in q_lower or "use" in q_lower or "actually" in q_lower) and any(card in q_lower for card in ["hdfc millennia", "sbi cashback", "axis ace", "amex", "icici", "regalia", "millennia", "sbi", "axis"]):
-            if not any(w in q_lower for w in ["buy", "cheapest", "price", "order", "what is"]):
-                return []
-        if "budget" in q_lower and ("is" in q_lower or "my budget" in q_lower or "make that" in q_lower or "₹" in q_lower or "rs" in q_lower):
-            if not any(w in q_lower for w in ["buy", "cheapest", "price", "order", "what is"]):
-                return []
+    def _deterministic_plan(cls, q_lower: str, context: Dict[str, Any] = None) -> List[str]:
+        resolved = (context or {}).get("resolved_query")
+        if resolved is not None:
+            planned = cls.OPERATION_PLANS.get(resolved.operation.value)
+            if planned is not None:
+                return list(planned)
 
         # Price Watch
-        if "watch" in q_lower or "alert" in q_lower or "drops below" in q_lower or "track" in q_lower:
+        if any(w in q_lower for w in ["watch", "alert", "drops below", "hits", "track", "ping me"]):
             return ["watch_price"]
 
+        # Memory / State Updates
+        if any(w in q_lower for w in ["prefer", "rather use", "my budget is", "make that", "scratch that", "instead"]):
+            if not any(w in q_lower for w in ["buy", "cheapest", "price", "order"]):
+                return []
+
         # Price Lookup
-        if any(w in q_lower for w in ["compare prices for", "compare price for", "how much is", "price on"]) and not any(w in q_lower for w in ["buy", "cheapest", "deal", "discount", "offer"]):
+        if any(w in q_lower for w in ["compare prices", "how much is", "price on"]) and not any(w in q_lower for w in ["buy", "cheapest", "deal", "discount", "offer"]):
             return ["compare_prices"]
 
-        # Card Info
-        if any(w in q_lower for w in ["reward cap", "category cap", "caps on", "base cashback rate", "reward rules", "does sbi cover", "does hdfc cover"]):
+        # Card Info / Eligibility
+        if any(w in q_lower for w in ["reward cap", "category cap", "caps on", "base cashback rate", "reward rules", "can i use", "is it eligible", "does sbi cover", "does hdfc cover"]):
             return ["get_reward_rules"]
 
-        # Deal Discovery / Deal Explanation
-        if any(w in q_lower for w in ["what deals are available", "what grocery deals", "what discounts does", "show me", "does blinkit have", "any deal for", "deals that work with", "largest discount at", "what does", "deal details", "discount does", "is there a deal", "offers on", "offers at", "deals at", "deals on"]) and not any(w in q_lower for w in ["cheapest way", "buy", "purchase"]):
+        # Deal Discovery / Deal Lookup
+        if any(w in q_lower for w in ["what deals", "what grocery deals", "what discounts", "all deals", "available at", "offers at", "does blinkit have", "what does deal_", "details for deal_"]) and not any(w in q_lower for w in ["cheapest way", "buy", "purchase", "pay least"]):
             return ["search_deals"]
 
-        # Product Optimization
-        return ["compare_prices", "search_deals", "best_card"]
+        # Product Optimization & Computation. The full chain the brief describes: find the
+        # prices, find the offers, rank the cards, then read the winning card's reward rules
+        # — the last of which also lets the answer be cross-checked against the card record.
+        return ["compare_prices", "search_deals", "best_card", "get_reward_rules"]

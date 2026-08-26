@@ -1,31 +1,31 @@
 from __future__ import annotations
 import os
 import re
-import sys
-import time
 import math
 import warnings
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List, Optional, Set, Tuple
 
 warnings.filterwarnings("ignore", message=".*automatic function calling.*")
 warnings.filterwarnings("ignore", category=UserWarning, module="google.genai")
 from dotenv import load_dotenv
 from langgraph.graph import StateGraph, END
+
 from app.agent.state import AgentState
 from app.agent.planner import Planner
-from app.agent.prompts import SYSTEM_RESPONSE_PROMPT
+from app.agent.resolver import QueryResolver, ResolvedQuery, Operation
+from app.agent.operations import execute_operation
 from app.rag.index import DataIndex
 from app.rag.retriever import HybridRetriever
 from app.rag.reranker import Reranker
+from app.core.reward_engine import PaymentOption
+from app.core.provenance import ProvenanceValidator, Value, Provenance
+from app.core.memory import MemoryManager
+from app.agent.candidates import merchant_display
 from app.tools.search_deals import search_deals
 from app.tools.compare_prices import compare_prices
 from app.tools.best_card import best_card
 from app.tools.get_reward_rules import get_reward_rules
 from app.tools.watch_price import watch_price
-from app.core.reward_engine import RewardEngine, PaymentOption
-from app.core.provenance import ProvenanceValidator, Value, Provenance
-from app.core.memory import MemoryManager
-from app.core.telemetry import TelemetryTracker
 
 load_dotenv()
 retriever_instance = HybridRetriever()
@@ -43,121 +43,11 @@ def is_injection_attack(deal: Dict[str, Any]) -> bool:
     return any(pattern in text for pattern in INJECTION_PATTERNS)
 
 
-def _matches_budget_update(query: str) -> bool:
-    q = query.lower()
-    return "budget" in q or "make that" in q
-
-
-def _matches_preference_update(query: str) -> bool:
-    q = query.lower()
-    cards = ["hdfc millennia", "sbi cashback", "axis ace", "amex smartearn", "icici amazon pay", "hdfc regalia", "millennia", "sbi", "axis", "amex", "icici", "regalia"]
-    if "prefer" in q or "use" in q or "actually" in q or "instead" in q:
-        return any(card in q for card in cards)
-    return False
-
-
-def _is_pure_memory_update(query: str) -> bool:
-    q = query.lower()
-    if "can i use" in q or "could i use" in q or "should i use" in q or "is it eligible" in q:
-        return False
-    action_words = ["find", "cheapest", "best price", "lowest", "buy", "purchase", "order", "what deal", "how much", "tell me", "drops below", "compare", "details for", "is there a deal", "reward cap", "what is the"]
-    product_words = ["basket", "essentials", "iphone", "macbook", "flight", "resort", "hotel", "dinner", "meal", "shoes", "tv", "bill", "kindle", "dyson", "vacuum", "tesla", "headphones", "sony", "groceries worth", "groceries on"]
-    has_action = any(w in q for w in action_words)
-    has_product = any(w in q for w in product_words)
-    if has_action and has_product:
-        return False
-    return _matches_budget_update(q) or _matches_preference_update(q)
-
-
-def _apply_memory_update(state: AgentState, query: str) -> bool:
-    q = query.lower()
-    if not _is_pure_memory_update(q):
-        return False
-
-    s_id = state.get("session_id")
-    conv_state = state.get("conversation_state") or {
-        "budget": None,
-        "preferred_card": None,
-        "category_preferences": {},
-        "other_relevant_constraints": {}
-    }
-
-    updated = False
-    if _matches_budget_update(q):
-        m = re.search(r"(\d[\d,]{2,8})", q)
-        if m:
-            b_val = float(m.group(1).replace(",", ""))
-            state["budget"] = b_val
-            conv_state["budget"] = b_val
-            if s_id:
-                MemoryManager.update_budget(s_id, b_val)
-            if "grocery" in q or "groceries" in q:
-                state["category"] = "groceries"
-                if s_id:
-                    MemoryManager.update_category(s_id, "groceries")
-                state["final_response"] = f"Got it — I’ll use ₹{b_val:,.0f} as your grocery budget for this conversation."
-            else:
-                state["final_response"] = f"Got it — I’ll use ₹{b_val:,.0f} as your budget for this conversation."
-            state["trace"] = [Value(amount=b_val, provenance=Provenance.SOURCE, record_id="user_budget")]
-            updated = True
-
-    if _matches_preference_update(q):
-        card_map = {
-            "hdfc millennia": "hdfc_millennia",
-            "millennia": "hdfc_millennia",
-            "sbi cashback": "sbi_cashback",
-            "sbi": "sbi_cashback",
-            "axis ace": "axis_ace",
-            "axis": "axis_ace",
-            "amex smartearn": "amex_smartearn",
-            "amex": "amex_smartearn",
-            "icici amazon pay": "icici_amazon_pay",
-            "icici": "icici_amazon_pay",
-            "hdfc regalia": "hdfc_regalia",
-            "regalia": "hdfc_regalia",
-        }
-        chosen = None
-        for key, value in card_map.items():
-            if key in q:
-                chosen = value
-                break
-        if chosen:
-            if "for electronics" in q or ("electronics" in q and "prefer" in q):
-                conv_state.setdefault("category_preferences", {})["electronics"] = chosen
-                if s_id:
-                    MemoryManager.update_category_preference(s_id, "electronics", chosen)
-                state["final_response"] = f"Got it — I’ll prefer {chosen} for electronics."
-            elif "for groceries" in q or ("groceries" in q and "prefer" in q):
-                conv_state.setdefault("category_preferences", {})["groceries"] = chosen
-                if s_id:
-                    MemoryManager.update_category_preference(s_id, "groceries", chosen)
-                state["final_response"] = f"Got it — I’ll prefer {chosen} for groceries."
-            elif "for travel" in q or ("travel" in q and "prefer" in q):
-                conv_state.setdefault("category_preferences", {})["travel"] = chosen
-                if s_id:
-                    MemoryManager.update_category_preference(s_id, "travel", chosen)
-                state["final_response"] = f"Got it — I’ll prefer {chosen} for travel."
-            else:
-                state["preferred_card"] = chosen
-                conv_state["preferred_card"] = chosen
-                if s_id:
-                    MemoryManager.update_card(s_id, chosen)
-                state["final_response"] = f"Got it — I’ll prefer {chosen} for this conversation."
-            updated = True
-
-    if updated:
-        state["conversation_state"] = conv_state
-        if s_id:
-            MemoryManager.set_conversation_state(s_id, conv_state)
-        return True
-    return False
-
-
 def retrieve_node(state: AgentState) -> AgentState:
     query = (state.get("query") or "").strip()
-    q_low = query.lower()
-
     s_id = state.get("session_id")
+
+    # Sync session memory
     if s_id:
         sess = MemoryManager.get_session(s_id)
         if state.get("budget") is None and sess.budget is not None:
@@ -169,28 +59,54 @@ def retrieve_node(state: AgentState) -> AgentState:
         if not state.get("conversation_state") and sess.conversation_state:
             state["conversation_state"] = sess.conversation_state
 
-    if _apply_memory_update(state, query):
-        state["skip_planning"] = True
-        state["planned_tools"] = []
-        state["citations"] = []
-        return state
-    
-    cat = None
-    if any(w in q_low for w in ["electronic", "laptop", "macbook", "headphone", "headphones", "phone", "iphone", "tv", "sony", "croma", "apple", "kindle", "paperwhite"]):
-        cat = "electronics"
-    elif any(w in q_low for w in ["flight", "hotel", "travel", "travelfly", "makemytrip", "cleartrip", "delhi", "mumbai", "goa", "agoda", "resort"]):
-        cat = "travel"
-    elif any(w in q_low for w in ["shoe", "shoes", "clothing", "jean", "jeans", "bag", "shopping", "nike", "levis", "samsonite", "ajio", "myntra"]):
-        cat = "shopping"
-    elif any(w in q_low for w in ["bill", "bills", "electricity", "utility", "recharge"]):
-        cat = "bills"
-    elif any(w in q_low for w in ["dining", "food", "restaurant", "meal", "swiggy", "zomato", "dinner", "eatsure", "eat sure"]):
-        cat = "food"
-    elif any(w in q_low for w in ["grocery", "groceries", "milk", "dairy", "superstore", "bigbasket", "blinkit", "zepto", "instamart", "basket", "essentials"]):
-        cat = "groceries"
-    else:
-        cat = state.get("category")
+    # 1. Resolve Query using Unified Data-Driven Resolver
+    resolved = QueryResolver.resolve(
+        query=query,
+        session_id=s_id,
+        session_state=state.get("conversation_state")
+    )
+    state["resolved_query"] = resolved
+    state["operation"] = resolved.operation.value
 
+    # 2. Check Abstention for Unresolved Entities
+    if resolved.operation == Operation.ABSTAIN:
+        state["final_response"] = "no reliable deal found"
+        state["citations"] = []
+        state["abstained"] = True
+        state["skip_planning"] = True
+        return state
+
+    # STATE mutates session memory, CLARIFY asks a question, EXPLAIN reads the stored
+    # recommendation memo. None of them may consult retrieval: a retrieved candidate must
+    # never be able to create or replace what the user is actually talking about.
+    if resolved.operation in (Operation.STATE, Operation.CLARIFY, Operation.EXPLAIN):
+        state["retrieved_records"] = []
+        state["excluded_injection_records"] = []
+        state["max_retrieval_score"] = 1.0
+        return execute_operation(resolved, state)
+
+    # 3. Retrieval to ground meaning (only when needed by operation).
+    #
+    # RETRIEVAL IS EVIDENCE DISCOVERY, NOT INTENT (spec section 17, invariant B). Whatever
+    # comes back is passed to the candidate builder as supporting evidence only; the
+    # product, merchant, category and card in scope were fixed by QueryResolver against the
+    # conversation thread and cannot be overwritten by a record that happened to score well.
+    # A context-dependent follow-up ("what if I use SBI?", "how much do I actually
+    # save?") was already resolved against the session's active purchase context in
+    # QueryResolver.resolve() (product/card inheritance) — a fresh global deal search
+    # would be redundant at best and could surface unrelated candidates at worst, so skip
+    # it and let the calculation path use the resolved entities directly.
+    # LOOKUP is deliberately NOT in this list. A record lookup does not consume retrieved
+    # records, but the prompt-injection filter lives in this node, and skipping retrieval
+    # skipped the defence with it — so whether an attack record was detected depended on
+    # which operation the classifier happened to choose for the same question.
+    if resolved.is_followup or resolved.operation in [Operation.STATE, Operation.ABSTAIN] or (resolved.operation == Operation.COMPUTE and resolved.cards and not resolved.merchants and not resolved.deals):
+        state["retrieved_records"] = []
+        state["excluded_injection_records"] = []
+        state["max_retrieval_score"] = 1.0
+        return state
+
+    cat = resolved.category or state.get("category")
     state["category"] = cat
 
     raw_results, abstained, max_score = retriever_instance.search(query, category=cat, top_k=12)
@@ -198,7 +114,6 @@ def retrieve_node(state: AgentState) -> AgentState:
 
     clean_records = []
     excluded_records = []
-
     for r in reranked:
         if is_injection_attack(r):
             excluded_records.append(r["deal_id"])
@@ -210,99 +125,39 @@ def retrieve_node(state: AgentState) -> AgentState:
 
     state["retrieved_records"] = clean_records
     state["excluded_injection_records"] = excluded_records
-    state["abstained"] = abstained or (len(clean_records) == 0 and len(raw_results) > 0)
     state["max_retrieval_score"] = max_score
+
+    # Only abstain on low retrieval score if no entities at all were matched
+    if not (resolved.products or resolved.deals or resolved.cards or resolved.amount or resolved.reward_spend or resolved.purchase_amount) and (abstained or len(clean_records) == 0):
+        state["abstained"] = True
 
     return state
 
+
 def check_abstention_router(state: AgentState) -> str:
-    if state.get("skip_planning"):
-        return "abstain_response"
-    if state.get("abstained", False):
+    if state.get("skip_planning") or state.get("abstained", False):
         return "abstain_response"
     return "plan_node"
 
-def abstain_response_node(state: AgentState) -> AgentState:
-    query = (state.get("query") or "").strip()
-    if state.get("final_response"):
-        state["provenance_valid"] = True
-        state["citations"] = state.get("citations", [])
-        return state
 
-    records = state.get("retrieved_records", [])
-    record_ids = [r["deal_id"] for r in records]
-    
-    state["final_response"] = (
-        "no reliable deal found"
-    )
-    state["citations"] = record_ids
+def abstain_response_node(state: AgentState) -> AgentState:
+    if not state.get("final_response"):
+        state["final_response"] = "no reliable deal found"
+    state["citations"] = state.get("citations", [])
     state["provenance_valid"] = True
     return state
+
 
 def plan_node(state: AgentState) -> AgentState:
     query = (state.get("query") or "").strip()
     if state.get("skip_planning"):
         state["planned_tools"] = []
         return state
+
     planned_tools, mode = Planner.plan_tools(query, state)
     state["planned_tools"] = planned_tools
     state["planner_mode"] = mode
     return state
-
-def _extract_matched_product(query: str, products: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    q_low = query.lower()
-    for p in products:
-        p_name = p["name"].lower()
-        if p_name in q_low:
-            return p
-    
-    query_digits = set(re.findall(r"\b\d+\b", q_low))
-    stopwords = {"can", "get", "the", "for", "and", "deal", "deals", "best", "price", "prices", "card", "cards", "with", "from", "find", "order", "want", "need", "offer", "discount", "cheaper", "cheapest", "way", "buy", "purchase", "where", "how", "what", "much", "tell"}
-    tokens = [t for t in re.findall(r"[a-z0-9]+", q_low) if t not in stopwords]
-    best_p = None
-    max_s = 0
-    for p in products:
-        p_name = p["name"].lower()
-        p_digits = set(re.findall(r"\b\d+\b", p_name))
-        p_tokens = set(re.findall(r"[a-z0-9]+", p_name))
-        if query_digits and p_digits and not query_digits.intersection(p_digits):
-            continue
-        t_matches = sum(2 for t in tokens if t in p_tokens or (len(t) > 3 and t in p_name))
-        d_matches = sum(5 for d in query_digits if d in p_digits)
-        score = t_matches + d_matches
-        if score > max_s:
-            max_s = score
-            best_p = p
-    if max_s >= 2:
-        return best_p
-    return None
-
-
-def _extract_matched_card(query: str, cards: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    q_low = query.lower()
-    for c in cards:
-        c_name = c["name"].lower()
-        c_id = c["card_id"].lower()
-        if c_id in q_low or c_name in q_low:
-            return c
-    # Fallback to key card aliases
-    aliases = {
-        "millennia": "hdfc_millennia",
-        "regalia": "hdfc_regalia",
-        "sbi": "sbi_cashback",
-        "axis": "axis_ace",
-        "ace": "axis_ace",
-        "amex": "amex_smartearn",
-        "smartearn": "amex_smartearn",
-        "amazon pay": "icici_amazon_pay",
-        "icici": "icici_amazon_pay"
-    }
-    for alias, cid in aliases.items():
-        if alias in q_low:
-            for c in cards:
-                if c["card_id"] == cid:
-                    return c
-    return None
 
 
 def execute_tools_node(state: AgentState) -> AgentState:
@@ -310,6 +165,7 @@ def execute_tools_node(state: AgentState) -> AgentState:
     planned = state.get("planned_tools", [])
     results: Dict[str, Any] = {}
     tool_mapping: Dict[str, str] = {}
+    resolved: Optional[ResolvedQuery] = state.get("resolved_query")
 
     for tool in planned:
         if tool == "compare_prices":
@@ -329,8 +185,8 @@ def execute_tools_node(state: AgentState) -> AgentState:
             deal_ids = [d.get("deal_id") for d in deals_list if isinstance(d, dict)]
             tool_mapping["search_deals"] = f"found {len(deals_list)} candidate deals: {', '.join(deal_ids) if deal_ids else 'none'}"
         elif tool == "best_card":
-            amt = state.get("budget")
-            cat = state.get("category", "groceries")
+            amt = (resolved.reward_spend or resolved.purchase_amount or resolved.amount or state.get("budget")) if resolved else state.get("budget")
+            cat = state.get("category", "shopping")
             res = best_card(amount=amt, category=cat, spend_to_date=state.get("spend_to_date"))
             results["best_card"] = res
             if res.get("best_card"):
@@ -339,624 +195,282 @@ def execute_tools_node(state: AgentState) -> AgentState:
                 tool_mapping["best_card"] = "evaluated card reward rates"
         elif tool == "get_reward_rules":
             cards = DataIndex.get_cards()
-            matched_c = _extract_matched_card(query, cards)
-            card_id = matched_c["card_id"] if matched_c else (state.get("preferred_card") or "hdfc_millennia")
-            res = get_reward_rules(card_id)
-            results["get_reward_rules"] = res
-            tool_mapping["get_reward_rules"] = f"card '{card_id}' base rate {res.get('base_rate', 0)*100:g}%"
+            card_id = resolved.cards[0]["card_id"] if resolved and resolved.cards else (state.get("preferred_card") or (cards[0]["card_id"] if cards else None))
+            if card_id:
+                res = get_reward_rules(card_id)
+                results["get_reward_rules"] = res
+                tool_mapping["get_reward_rules"] = f"card '{card_id}' base rate {res.get('base_rate', 0)*100:g}%"
         elif tool == "watch_price":
-            amt = state.get("budget")
-            match_target = re.search(r"(?:below|at|target|drops\s*to|under)\s*(?:RS\s*|₹\s*)?(\d{3,6})", query, re.IGNORECASE)
-            if match_target:
-                amt = float(match_target.group(1))
-            if amt is None:
-                amt = 25000.0
-            res = watch_price(query, target_price=amt, session_id=state.get("session_id", "default"))
+            target = (resolved.target_price or resolved.target) if resolved else None
+            res = watch_price(query, target_price=target, session_id=state.get("session_id", "default"))
             results["watch_price"] = res
             gap_val = res.get("gap")
             gap_amt = gap_val.amount if gap_val else 0.0
             curr_p = res.get("current_lowest_price")
             curr_amt = curr_p.amount if curr_p else 0.0
-            tool_mapping["watch_price"] = f"target RS {amt:.0f}, current RS {curr_amt:.0f}, gap RS {gap_amt:.0f}"
+            tool_mapping["watch_price"] = f"target RS {target or 0:.0f}, current RS {curr_amt:.0f}, gap RS {gap_amt:.0f}"
 
     state["tool_results"] = results
     state["tool_mapping"] = tool_mapping
     return state
 
 
+def corroborate_with_tools(state: AgentState, best_opt: Optional[PaymentOption]) -> Dict[str, Any]:
+    """
+    Cross-check the derived recommendation against the tools the planner actually ran.
+
+    WHY THIS EXISTS
+    ---------------
+    The planner composes several tool calls per turn — typically compare_prices, then
+    search_deals, then best_card / get_reward_rules — but their results were being recorded
+    and then ignored: the answer was derived independently, so a disagreement between the
+    tool layer and the derivation layer could never be noticed. Two implementations of the
+    same fact that never meet are two chances to be wrong.
+
+    Each tool is checked only where it is authoritative and only where it refers to the same
+    entity as the recommendation, so this cannot fabricate a disagreement:
+
+      * compare_prices    -> the base price charged must be one this product's catalog
+                             record actually lists, at the merchant we named.
+      * get_reward_rules  -> the reward rate the engine applied must equal base_rate x the
+                             category multiplier the card's own policy states.
+      * search_deals      -> a discount may only come from a real deal record.
+
+    A tool can only ever CONTRADICT a figure here; it can never supply one. On disagreement
+    the answer is blocked rather than shipped, because a mismatch means one of the two paths
+    has a bug and we cannot tell which.
+    """
+    report: Dict[str, Any] = {"checks": [], "disagreements": []}
+    results = state.get("tool_results") or {}
+    if not best_opt:
+        return report
+
+    def record(tool: str, claim: str, agrees: bool) -> None:
+        report["checks"].append({"tool": tool, "claim": claim, "agrees": agrees})
+        if not agrees:
+            report["disagreements"].append(f"{tool}: {claim}")
+
+    # --- compare_prices: is the base price one this product really carries?
+    cp = results.get("compare_prices")
+    if cp and cp.get("found") and best_opt.product_id and cp.get("product_id") == best_opt.product_id:
+        raw = {m.lower(): float(v) for m, v in (cp.get("raw_prices") or {}).items()}
+        base = best_opt.base_price.amount
+        merch = (best_opt.merchant or "").lower()
+        if merch and merch in raw:
+            record("compare_prices",
+                   f"base RS {base:.2f} matches catalogue price at {merch}",
+                   abs(raw[merch] - base) < 0.01)
+        else:
+            record("compare_prices",
+                   f"base RS {base:.2f} is one of this product's listed prices",
+                   any(abs(v - base) < 0.01 for v in raw.values()))
+
+    # --- get_reward_rules: is the applied rate the card's own published rate?
+    # The tool ran before the winner was known, so if the planner asked for reward rules we
+    # consult them for the card actually chosen. The tool only reads the card record; it
+    # cannot supply a figure, only contradict one.
+    rr = results.get("get_reward_rules")
+    if best_opt.card_id and (not rr or rr.get("card_id") != best_opt.card_id):
+        if "get_reward_rules" in (state.get("planned_tools") or []):
+            rr = get_reward_rules(best_opt.card_id)
+    if rr and rr.get("found") and best_opt.card_id and rr.get("card_id") == best_opt.card_id:
+        # Reward rates are per CATEGORY, so the check has to use the SAME category the
+        # engine did — the winning option's own product (which in a product comparison need
+        # not be the first-named one), else the category the query resolved to. Reading
+        # state["category"] instead was wrong: it is unset for an amount-only calculation,
+        # which made a correct 5% grocery rate look like a 1% mismatch.
+        _resolved = state.get("resolved_query")
+        cat = (getattr(_resolved, "category", None) or state.get("category") or "general")
+        if best_opt.product_id:
+            _wp = DataIndex.get_product_by_id(best_opt.product_id)
+            if _wp and _wp.get("category"):
+                cat = _wp["category"]
+        expected = float(rr.get("base_rate", 0.0)) * float(rr.get("category_multipliers", {}).get(cat, 1.0))
+        applied = float(best_opt.reward_rate_applied or 0.0)
+        # A rate of zero is legitimate when the card's own minimum spend was not met.
+        record("get_reward_rules",
+               f"applied rate {applied * 100:g}% matches {rr['card_id']} policy for {cat}",
+               abs(expected - applied) < 1e-9 or applied == 0.0)
+
+    # --- search_deals: any discount must trace to a real deal record.
+    if best_opt.discount_source_id:
+        record("search_deals",
+               f"discount sourced from catalogue record {best_opt.discount_source_id}",
+               DataIndex.get_deal_by_id(best_opt.discount_source_id) is not None)
+
+    report["agreed"] = not report["disagreements"]
+    return report
+
+
 def compute_rewards_node(state: AgentState) -> AgentState:
-    query = (state.get("query") or "").strip()
-    query_lower = query.lower()
     if state.get("skip_planning"):
         return state
 
-    retrieved = state.get("retrieved_records", [])
-    tool_res = state.get("tool_results", {})
-    products = DataIndex.get_products()
-    deals = DataIndex.get_deals()
-    cards = DataIndex.get_cards()
-
-    matched_prod = _extract_matched_product(query, products)
-    matched_c = _extract_matched_card(query, cards)
-    matched_deal = None
-    for d in deals:
-        if d["deal_id"].lower() in query_lower or d["title"].lower() in query_lower or d["merchant"].lower() in query_lower:
-            matched_deal = d
-            break
-
-    # ==========================================
-    # ROUTE 0: PRICE_WATCH (Skips reward engine)
-    # ==========================================
-    if any(w in query_lower for w in ["track", "price watch", "drops below", "watch_price"]):
-        match_target = re.search(r"(?:below|at|target|drops\s*to|under)\s*(?:RS\s*|₹\s*)?(\d{3,6})", query, re.IGNORECASE)
-        target_amt = float(match_target.group(1)) if match_target else (state.get("budget") or 25000.0)
-        watch_res = tool_res.get("watch_price") or watch_price(query, target_price=target_amt, session_id=state.get("session_id", "default"))
-        prod = watch_res.get("product_name", "Requested Product")
-        curr_p = watch_res.get("current_lowest_price")
-        curr_amt = curr_p.amount if curr_p else 0.0
-        merch = watch_res.get("lowest_price_merchant", "Amazon")
-        gap_amt = max(0.0, curr_amt - target_amt)
-        cmp_data = tool_res.get("compare_prices", {})
-        prod_id = cmp_data.get("product_id") or (matched_prod["product_id"] if matched_prod else "prod_watch")
-        cits = [prod_id]
-
-        draft = (
-            f"Recommendation: Price watch registered for '{prod}' at target RS {target_amt:.0f}.\n"
-            f"• Current Lowest Price: RS {curr_amt:.0f} (at {merch})\n"
-            f"• Target Price: RS {target_amt:.0f}\n"
-            f"• Price Gap to Target: RS {gap_amt:.0f} (above target)\n"
-            f"• Watch Status: ACTIVE. No currently active deal crosses the RS {target_amt:.0f} threshold.\n"
-            f"Citations: {cits}"
+    resolved: Optional[ResolvedQuery] = state.get("resolved_query")
+    if not resolved:
+        resolved = QueryResolver.resolve(
+            query=state.get("query", ""),
+            session_id=state.get("session_id"),
+            session_state=state.get("conversation_state")
         )
-        new_trace = [
-            Value(amount=target_amt, provenance=Provenance.SOURCE, record_id="target_price"),
-            Value(amount=curr_amt, provenance=Provenance.SOURCE, record_id="current_price"),
-            Value(amount=gap_amt, provenance=Provenance.DERIVED, record_id="gap_price"),
-            Value(amount=round(curr_amt, 0), provenance=Provenance.SOURCE, record_id="curr_rounded"),
-            Value(amount=round(gap_amt, 0), provenance=Provenance.DERIVED, record_id="gap_rounded"),
-            Value(amount=round(target_amt, 0), provenance=Provenance.SOURCE, record_id="target_rounded")
-        ]
-        state["payment_options"] = []
-        state["best_option"] = None
-        state["runner_up_option"] = None
-        state["final_response"] = draft
-        state["draft_response"] = draft
-        state["citations"] = cits
-        state["trace"] = new_trace
-        state["is_info_query"] = True
-        state["provenance_valid"] = True
-        return state
+        state["resolved_query"] = resolved
 
-    # ==========================================
-    # ROUTE 1: PRICE_LOOKUP (No recommendations)
-    # ==========================================
-    if any(q_phrase in query_lower for q_phrase in ["compare prices for", "how much is", "price on", "what is the price of", "compare price"]) and matched_prod and not any(w in query_lower for w in ["cheapest way", "best card", "deal", "discount", "buy"]):
-        prod_name = matched_prod["name"]
-        prod_id = matched_prod["product_id"]
-        prices = matched_prod.get("prices", {})
-        
-        trace_facts = []
-        lines = []
-        lowest_p = float("inf")
-        lowest_m = None
-        for m_name, p_amt in prices.items():
-            trace_facts.append(Value(amount=float(p_amt), provenance=Provenance.SOURCE, record_id=f"{prod_id}_{m_name}"))
-            lines.append(f"• {m_name.capitalize()}: RS {p_amt:,.0f}")
-            if p_amt < lowest_p:
-                lowest_p = float(p_amt)
-                lowest_m = m_name.capitalize()
-        
-        draft = (
-            f"Price Comparison for {prod_name}:\n"
-            + "\n".join(lines) + "\n"
-            + f"Lowest price is RS {lowest_p:,.0f} at {lowest_m}."
+    # Execute corresponding operation handler
+    result = execute_operation(resolved, state)
+
+    # The planner's tool calls now feed back into the answer: whatever they independently
+    # report about price, reward policy and deal provenance is checked against what the
+    # derivation produced, and a contradiction stops the turn.
+    corroboration = corroborate_with_tools(result, result.get("best_option"))
+    result["tool_corroboration"] = corroboration
+    if corroboration.get("disagreements"):
+        detail = "; ".join(corroboration["disagreements"])
+        result["final_response"] = (
+            "I can't give you a number I trust for this: the catalogue lookup and the "
+            f"reward derivation disagree ({detail}). Nothing has been recommended."
         )
-        state["payment_options"] = []
-        state["best_option"] = None
-        state["runner_up_option"] = None
-        state["final_response"] = draft
-        state["draft_response"] = draft
-        state["citations"] = [prod_id]
-        state["trace"] = trace_facts
-        state["is_info_query"] = True
-        state["provenance_valid"] = True
-        return state
+        result["draft_response"] = result["final_response"]
+        result["best_option"] = None
+        result["citations"] = []
+        result["abstained"] = True
+        result["skip_planning"] = True
+        result["provenance_checked"] = True
+        result["provenance_valid"] = True
+        return result
 
-    # ==========================================
-    # ROUTE 2: CARD_INFO & ELIGIBILITY
-    # ==========================================
-    if any(w in query_lower for w in ["reward cap", "what is the reward cap", "caps on", "category caps", "base cashback rate", "base rate", "reward rules", "can i use", "eligible", "eligibility", "does sbi cover", "does hdfc cover"]):
-        c_id = matched_c["card_id"] if matched_c else "hdfc_millennia"
-        c_rules = get_reward_rules(c_id)
-        c_name = c_rules.get("name", c_id)
-        b_rate = c_rules.get("base_rate", 0.01) * 100
-        caps = c_rules.get("caps", {})
-        m_cap = caps.get("monthly_cashback_cap", 0)
-        cat_caps = caps.get("category_caps", {})
-        
-        trace_facts = [
-            Value(amount=float(b_rate), provenance=Provenance.SOURCE, record_id=f"{c_id}_base_rate"),
-            Value(amount=float(m_cap), provenance=Provenance.SOURCE, record_id=f"{c_id}_monthly_cap")
-        ]
-        for ck, cv in cat_caps.items():
-            trace_facts.append(Value(amount=float(cv), provenance=Provenance.SOURCE, record_id=f"{c_id}_{ck}_cap"))
-        
-        cat_cap_str = ", ".join([f"RS {cv:.0f} on {ck}" for ck, cv in cat_caps.items()]) if cat_caps else "none"
-        if any(w in query_lower for w in ["can i use", "eligible", "eligibility"]):
-            draft = f"Yes, you can use {c_name} ({c_id}). It provides a 5% cashback rate on online transactions, capped at RS {m_cap:.0f} per month."
-        else:
-            draft = f"Reward Rules for {c_name} ({c_id}): Base cashback rate is {b_rate:g}%. Monthly cashback cap is RS {m_cap:.0f}. Category caps: {cat_cap_str}."
-        state["payment_options"] = []
-        state["best_option"] = None
-        state["runner_up_option"] = None
-        state["final_response"] = draft
-        state["draft_response"] = draft
-        state["citations"] = [c_id]
-        state["trace"] = trace_facts
-        state["is_info_query"] = True
-        state["provenance_valid"] = True
-        return state
+    # Record the recommendation into the conversation thread. This is the ONLY place a
+    # recommendation memo is written, and it is written from the deterministic engine's
+    # own PaymentOption + provenance trace — so a later "why?" / "what was the discount?"
+    # re-states figures that were already grounded rather than recomputing or re-retrieving.
+    s_id = result.get("session_id")
+    best_opt = result.get("best_option")
+    if s_id and best_opt:
+        if best_opt.discount_source_id:
+            MemoryManager.update_last_entities(s_id, deal_id=best_opt.discount_source_id)
 
-    # ==========================================
-    # ROUTE 2B: CARD_REWARD COMPARISON
-    # ==========================================
-    if any(w in query_lower for w in ["which card is best", "which card gives the best", "best card for travel", "best card for groceries", "best card for electronics", "best card for shopping"]) and not matched_prod and not any(w in query_lower for w in ["cheapest way", "buy", "purchase", "price on"]):
-        match_amt = re.search(r"(?:RS\s*|₹\s*|worth\s*|spending\s*|order\s*of\s*|for\s*a\s*(?:RS\s*|₹\s*)?)(\d{3,6})", query, re.IGNORECASE)
-        q_amt = float(match_amt.group(1)) if match_amt else (state.get("budget") or 6000.0)
-        cat_val = None
-        for c_k in ["groceries", "electronics", "travel", "shopping", "bills", "food"]:
-            if c_k in query_lower:
-                cat_val = c_k
-                break
-        if not cat_val:
-            cat_val = state.get("category") or "travel"
-        
-        best_c = None
-        max_rew = -1.0
-        best_eff = 0.0
-        lines = []
-        c_citations = []
-        trace_facts = [
-            Value(amount=q_amt, provenance=Provenance.SOURCE, record_id="query_amount")
-        ]
-        for c in cards:
-            cid = c["card_id"]
-            c_citations.append(cid)
-            opt = RewardEngine.calculate_payment_option(base_price=Value(amount=q_amt, provenance=Provenance.SOURCE, record_id="query_amount"), deal=None, card=c, category=cat_val, spend_to_date=state.get("spend_to_date"))
-            rew_amt = opt.reward_earned.amount
-            eff_amt = opt.effective_price.amount
-            trace_facts.extend([
-                opt.reward_earned,
-                opt.effective_price,
-                Value(amount=round(rew_amt, 0), provenance=Provenance.DERIVED, record_id=f"{cid}_rew_r0"),
-                Value(amount=round(eff_amt, 0), provenance=Provenance.DERIVED, record_id=f"{cid}_eff_r0")
-            ])
-            lines.append(f"• {c['name']} ({cid}): RS {rew_amt:.0f} cashback (Effective RS {eff_amt:.0f})")
-            if rew_amt > max_rew:
-                max_rew = rew_amt
-                best_c = c
-                best_eff = eff_amt
-        
-        draft = (
-            f"Best card comparison for RS {q_amt:.0f} on {cat_val}:\n"
-            + "\n".join(lines) + "\n"
-            + f"Recommendation: {best_c['name']} ({best_c['card_id']}) gives the highest reward of RS {max_rew:.0f} (Effective price RS {best_eff:.0f})."
+        runner = result.get("runner_up_option")
+        resolved_q = result.get("resolved_query")
+        # The merchant travels ON the payment option now, so multi-word merchants survive
+        # intact; the deal record is only a fallback for amount-only calculations that have
+        # no product price behind them.
+        merchant_name = best_opt.merchant
+        if not merchant_name and best_opt.discount_source_id:
+            d_rec = DataIndex.get_deal_by_id(best_opt.discount_source_id)
+            if d_rec:
+                merchant_name = d_rec.get("merchant")
+
+        thread = (resolved_q.thread if resolved_q is not None and getattr(resolved_q, "thread", None)
+                  else MemoryManager.get_session(s_id).thread)
+
+        # The memo's trace must cover everything an explanation may later quote, including
+        # the runner-up's effective price and the margin over it. Both were produced by the
+        # deterministic engine on this turn — they simply live on the runner-up's option —
+        # so they are folded in here rather than being re-asserted, and therefore
+        # ungrounded, when "why?" or "what was the runner-up?" is asked.
+        memo_trace = list(best_opt.trace or [])
+        if runner is not None and best_opt.effective_price is not None:
+            margin = runner.effective_price.amount - best_opt.effective_price.amount
+            memo_trace.append(runner.effective_price)
+            memo_trace.append(Value(amount=round(margin, 2), provenance=Provenance.DERIVED,
+                                    record_id="runner_up_margin"))
+
+        thread.record_recommendation(
+            card_id=best_opt.card_id,
+            merchant=merchant_name,
+            deal_id=best_opt.discount_source_id,
+            base_price=best_opt.base_price.amount if best_opt.base_price else None,
+            base_price_after_discount=best_opt.price_after_discount.amount if best_opt.price_after_discount else None,
+            discount=best_opt.discount_applied.amount if best_opt.discount_applied else None,
+            reward=best_opt.reward_earned.amount if best_opt.reward_earned else None,
+            effective_price=best_opt.effective_price.amount if best_opt.effective_price else None,
+            runner_up_card=runner.card_id if runner else None,
+            runner_up_effective=runner.effective_price.amount if runner else None,
+            cap_hit=bool(best_opt.cap_hit),
+            cap_explanation=best_opt.cap_explanation,
+            product_name=(resolved_q.products[0]["name"] if resolved_q and resolved_q.products else None),
+            trace=memo_trace,
+            citations=list(best_opt.citations or []),
         )
-        state["payment_options"] = []
-        state["best_option"] = None
-        state["runner_up_option"] = None
-        state["final_response"] = draft
-        state["draft_response"] = draft
-        state["citations"] = c_citations
-        state["trace"] = trace_facts
-        state["is_info_query"] = True
-        state["provenance_valid"] = True
-        return state
 
-    # ==========================================
-    # ROUTE 3A: DEAL_DISCOVERY (Listing offers)
-    # ==========================================
-    deal_disc_phrases = [
-        "what deals are available", "what grocery deals", "what discounts does",
-        "show me grocery offers", "show me", "does blinkit have", "any deal for",
-        "deals that work with", "largest discount at", "grocery deals", "electronics deals",
-        "travel deals", "shopping deals", "deals available", "available deals",
-        "offers available", "what offers", "discounts on", "discounts at", "deals on", "deals at"
-    ]
-    is_deal_disc = any(w in query_lower for w in deal_disc_phrases) and not any(w in query_lower for w in ["cheapest way", "buy", "purchase", "what is the price", "compare prices for", "order of", "order worth", "i am buying", "spending", "worth ₹", "worth rs", "discount does bigbasket"])
-
-    if is_deal_disc:
-        t_merch = None
-        for m in ["bigbasket", "amazon", "flipkart", "croma", "blinkit", "swiggy", "zomato", "cleartrip", "agoda", "easemytrip", "yatra", "eatsure", "myntra", "ajio", "country delight", "superstore", "techworld", "travelfly"]:
-            if m in query_lower:
-                t_merch = m
-                break
-        
-        t_cat = None
-        for k in ["groceries", "grocery", "electronics", "electronic", "travel", "flight", "hotel", "shopping", "bills", "utility", "food", "dining", "appliances"]:
-            if k in query_lower:
-                t_cat = "groceries" if k in ["groceries", "grocery"] else ("electronics" if k in ["electronics", "electronic", "appliances"] else ("travel" if k in ["travel", "flight", "hotel"] else ("bills" if k in ["bills", "utility"] else ("food" if k in ["food", "dining"] else "shopping"))))
-                break
-        if not t_cat:
-            t_cat = state.get("category")
-        
-        t_card = matched_c["card_id"] if matched_c else None
-        
-        matching_deals = []
-        for d in deals:
-            if t_merch and (d.get("merchant", "").lower() != t_merch.lower() and d.get("merchant", "").lower() not in ["all", "any"]):
-                continue
-            if t_cat and (d.get("category", "").lower() != t_cat.lower() and d.get("category", "").lower() not in ["all", "any"]):
-                continue
-            if t_card and d.get("card_specific") and d.get("card_specific").lower() != t_card.lower():
-                continue
-            matching_deals.append(d)
-        
-        if not matching_deals and retrieved:
-            matching_deals = [r for r in retrieved if not is_injection_attack(r)]
-        
-        if not matching_deals:
-            state["final_response"] = "no reliable deal found"
-            state["citations"] = []
-            state["abstained"] = True
-            state["skip_planning"] = True
-            return state
-        
-        lines = []
-        trace_facts = []
-        cits = []
-        for d in matching_deals:
-            d_id = d["deal_id"]
-            cits.append(d_id)
-            d_type = d.get("discount_type")
-            d_val = d.get("discount_value", 0)
-            min_s = float(d.get("min_spend", 0))
-            max_d = float(d.get("max_discount", d_val or 0))
-            
-            trace_facts.extend([
-                Value(amount=min_s, provenance=Provenance.SOURCE, record_id=f"{d_id}_min_spend"),
-                Value(amount=max_d, provenance=Provenance.SOURCE, record_id=f"{d_id}_max_discount")
-            ])
-            
-            if d_type == "percentage":
-                display_pct = d_val * 100 if d_val <= 1.0 else d_val
-                trace_facts.append(Value(amount=float(display_pct), provenance=Provenance.SOURCE, record_id=f"{d_id}_pct"))
-                desc_str = f"{display_pct:g}% instant discount (capped at RS {max_d:.0f}) on min spend RS {min_s:.0f}"
-            else:
-                trace_facts.append(Value(amount=float(d_val), provenance=Provenance.SOURCE, record_id=f"{d_id}_flat_val"))
-                desc_str = f"flat RS {d_val:.0f} instant discount on min spend RS {min_s:.0f}"
-            
-            if d.get("card_specific"):
-                desc_str += f" (Card: {d.get('card_specific')})"
-            
-            lines.append(f"• {d_id} — {d.get('title')}: {desc_str}")
-        
-        header = f"Available deals"
-        if t_merch:
-            header += f" on {t_merch.capitalize()}"
-        if t_cat:
-            header += f" for {t_cat}"
-        if t_card:
-            header += f" with {t_card}"
-        header += ":"
-        
-        draft = header + "\n" + "\n".join(lines)
-        
-        state["payment_options"] = []
-        state["best_option"] = None
-        state["runner_up_option"] = None
-        state["final_response"] = draft
-        state["draft_response"] = draft
-        state["citations"] = cits
-        state["trace"] = trace_facts
-        state["is_info_query"] = True
-        state["provenance_valid"] = True
-        return state
-
-    # ==========================================
-    # ROUTE 3B: DEAL_EXPLANATION (Single deal)
-    # ==========================================
-    deal_info_phrases = ["what does the", "what discount does", "deal details", "what deal is available", "what deal is", "what deal", "which deal has", "which deal", "details for deal_", "how much is the", "is there a deal", "offers from", "check superstore", "show me techworld", "what is travelfly"]
-    if any(w in query_lower for w in deal_info_phrases) and not any(w in query_lower for w in ["cheapest way", "best card for", "best way to buy"]):
-        for d in (retrieved + deals):
-            d_merch = (d.get("merchant") or "").lower()
-            d_title = (d.get("title") or "").lower()
-            d_cat = (d.get("category") or "").lower()
-            if (d_merch and d_merch in query_lower) or (d_cat and d_cat in query_lower) or d.get("deal_id").lower() in query_lower or (d_title and any(w in query_lower for w in re.findall(r"[a-z0-9]+", d_title) if len(w) > 4)):
-                matched_deal = d
-                break
-
-        if not matched_deal:
-            matched_deal = retrieved[0] if retrieved else deals[0]
-        d_name = matched_deal.get("title", matched_deal.get("deal_id"))
-        d_id = matched_deal.get("deal_id")
-        d_type = matched_deal.get("discount_type")
-        d_val = matched_deal.get("discount_value")
-        min_s = float(matched_deal.get("min_spend", 0))
-        max_d = float(matched_deal.get("max_discount", d_val or 0))
-        d_merch = matched_deal.get("merchant", "Partner")
-        d_cat = matched_deal.get("category", "shopping")
-
-        match_amt = re.search(r"(?:RS\s*|₹\s*|worth\s*|spending\s*|order\s*of\s*|for\s*a\s*(?:RS\s*|₹\s*)?)(\d{3,6})", query, re.IGNORECASE)
-        order_amt = float(match_amt.group(1)) if match_amt else None
-
-        trace_facts = [
-            Value(amount=min_s, provenance=Provenance.SOURCE, record_id=f"{d_id}_min_spend"),
-            Value(amount=max_d, provenance=Provenance.SOURCE, record_id=f"{d_id}_max_discount")
+        # Remember the rejected visible deals too, and fold their SOURCE figures into the
+        # memo's trace, so an explanation about one of them quotes numbers that are already
+        # grounded rather than asserting new ones.
+        rejected = result.get("rejected_visible_deals") or []
+        thread.last_rejected_deals = [
+            {
+                "deal_id": r.deal_id,
+                "headline": r.headline,
+                "reason": r.reason,
+                "figures": [round(float(v.amount), 2) for v in r.values],
+            }
+            for r in rejected
         ]
+        if rejected:
+            thread.last_trace = list(thread.last_trace) + [v for r in rejected for v in r.values]
 
-        if d_type == "percentage":
-            display_pct = d_val * 100 if d_val <= 1.0 else d_val
-            trace_facts.append(Value(amount=float(display_pct), provenance=Provenance.SOURCE, record_id=f"{d_id}_pct"))
-            if order_amt:
-                calc_disc = min(order_amt * (d_val if d_val <= 1.0 else d_val / 100), max_d)
-                final_p = order_amt - calc_disc
-                trace_facts.extend([
-                    Value(amount=order_amt, provenance=Provenance.SOURCE, record_id="order_amt"),
-                    Value(amount=calc_disc, provenance=Provenance.DERIVED, record_id="calculated_discount"),
-                    Value(amount=final_p, provenance=Provenance.DERIVED, record_id="final_price")
-                ])
-                draft = f"The {d_merch} {d_cat} deal ({d_id}) offers a {display_pct:g}% instant discount (capped at RS {max_d:.0f}) on a minimum spend of RS {min_s:.0f}. For a RS {order_amt:.0f} order, the discount is RS {calc_disc:.0f}, resulting in a price of RS {final_p:.0f}."
-            else:
-                draft = f"The {d_merch} {d_cat} deal ({d_id}) offers a {display_pct:g}% instant discount (capped at RS {max_d:.0f}) on a minimum spend of RS {min_s:.0f}."
-        else:
-            trace_facts.append(Value(amount=float(d_val), provenance=Provenance.SOURCE, record_id=f"{d_id}_flat_val"))
-            if order_amt:
-                calc_disc = min(float(d_val), max_d)
-                final_p = order_amt - calc_disc
-                trace_facts.extend([
-                    Value(amount=order_amt, provenance=Provenance.SOURCE, record_id="order_amt"),
-                    Value(amount=calc_disc, provenance=Provenance.DERIVED, record_id="calculated_discount"),
-                    Value(amount=final_p, provenance=Provenance.DERIVED, record_id="final_price")
-                ])
-                draft = f"The {d_merch} {d_cat} deal ({d_id}) offers a flat RS {d_val:.0f} instant discount on a minimum spend of RS {min_s:.0f}. For a RS {order_amt:.0f} order, the discount is RS {calc_disc:.0f}, resulting in a price of RS {final_p:.0f}."
-            else:
-                draft = f"The {d_merch} {d_cat} deal ({d_id}) offers a flat RS {d_val:.0f} instant discount on a minimum spend of RS {min_s:.0f}."
+    return result
 
-        state["payment_options"] = []
-        state["best_option"] = None
-        state["runner_up_option"] = None
-        state["final_response"] = draft
-        state["draft_response"] = draft
-        state["citations"] = [d_id]
-        state["trace"] = trace_facts
-        state["is_info_query"] = True
-        state["provenance_valid"] = True
-        return state
 
-    # ==========================================
-    # ROUTE 4: FULL EXHAUSTIVE OPTIMIZATION
-    # ==========================================
-    tool_res = state.get("tool_results", {})
-    retrieved = state.get("retrieved_records", [])
-    cmp = tool_res.get("compare_prices", {})
-    lowest_val = cmp.get("lowest_price")
+def _tie_sentence(state: AgentState) -> str:
+    """
+    State a joint-best outcome as a tie rather than picking one and calling it the winner.
 
-    cat = matched_prod.get("category") if matched_prod else (cmp.get("category") or state.get("category"))
-    if not cat:
-        for d in deals:
-            if d.get("category") and d.get("category").lower() in query_lower:
-                cat = d.get("category").lower()
-                break
-    if not cat:
-        cat = "shopping"
+    Every figure quoted is the ranking value the engine already produced, so this adds no
+    number that is not already in the trace.
+    """
+    tie = state.get("tie") or {}
+    labels = tie.get("labels") or []
+    if len(labels) < 2:
+        return ""
 
-    category_deals = [
-        d for d in deals
-        if (not d.get("category") or d.get("category").lower() in ["all", "any"] or (cat and d.get("category").lower() == cat.lower()))
-    ]
-    if retrieved:
-        category_deals = list({d.get("deal_id"): d for d in category_deals + retrieved}.values())
+    from app.agent.operations import _TIE_AXIS_NOUN, _TIE_COUNT_WORD, _TIE_METRIC_PHRASE
 
-    base_price = None
-    match_amt = re.search(r"(?:RS\s*|₹\s*|worth\s*|spending\s*|spend\s*|budget\s*is\s*|for\s*(?:a\s*)?(?:RS\s*|₹\s*)?)(\d{3,6})", query, re.IGNORECASE)
-    if match_amt:
-        query_amount = float(match_amt.group(1))
-        base_price = Value(amount=query_amount, provenance=Provenance.SOURCE, record_id="user_query_spend")
-    elif state.get("budget") is not None:
-        base_price = Value(amount=float(state.get("budget")), provenance=Provenance.SOURCE, record_id="session_budget")
-    elif lowest_val and isinstance(lowest_val, Value):
-        base_price = lowest_val
+    count = _TIE_COUNT_WORD.get(len(labels), str(len(labels)))
+    noun = _TIE_AXIS_NOUN.get(tie.get("axis", "card"), "options")
+    phrase = _TIE_METRIC_PHRASE.get(tie.get("metric", "effective_price"), "best result")
+    return (f"{count} {noun} tie for the {phrase} of RS {tie['value']:.0f}: "
+            f"{', '.join(labels)}.\n")
 
-    if not base_price:
-        state["final_response"] = "no reliable deal found"
-        state["abstained"] = True
-        state["skip_planning"] = True
-        return state
-
-    # Parse stated cap usage / prior spend from query
-    spend_to_date = dict(state.get("spend_to_date") or {})
-    cap_used_match = re.search(r"(?:used\s*(?:RS\s*|₹\s*)?(\d{2,5})|(\d{2,5})\s*cap\s*used)", query, re.IGNORECASE)
-    if cap_used_match:
-        c_amt = float(cap_used_match.group(1) or cap_used_match.group(2))
-        c_key = matched_c["card_id"] if matched_c else "hdfc_millennia"
-        spend_to_date[f"{c_key}_{cat}"] = c_amt
-
-    headroom_match = re.search(r"(?:(\d{2,5})\s*headroom|headroom\s*(?:of\s*)?(?:RS\s*|₹\s*)?(\d{2,5}))", query, re.IGNORECASE)
-    if headroom_match:
-        h_amt = float(headroom_match.group(1) or headroom_match.group(2))
-        c_key = matched_c["card_id"] if matched_c else "hdfc_millennia"
-        spend_to_date[f"{c_key}_{cat}"] = max(0.0, 500.0 - h_amt)
-
-    conv_state = state.get("conversation_state") or {}
-    cat_prefs = conv_state.get("category_preferences", {})
-    pref_card = (matched_c["card_id"] if matched_c else None) or cat_prefs.get(cat) or state.get("preferred_card")
-
-    # Hard named merchant filter
-    named_merchant = None
-    for m in ["flipkart", "amazon", "croma", "bigbasket", "cleartrip", "agoda", "swiggy", "eatsure", "zomato", "myntra", "ajio"]:
-        if f"on {m}" in query_lower or f"at {m}" in query_lower:
-            named_merchant = m
-            break
-
-    options: List[PaymentOption] = []
-    cmp_prices = cmp.get("merchant_prices", {})
-
-    if cmp.get("found") and cmp_prices and isinstance(cmp_prices, dict) and not match_amt:
-        for m_name, m_val in cmp_prices.items():
-            if named_merchant and m_name.lower() != named_merchant:
-                continue
-            m_deals = [d for d in category_deals if d.get("merchant", "").lower() == m_name.lower() or d.get("merchant", "").lower() in ["all", "any"]]
-            for c in cards:
-                for d in m_deals:
-                    options.append(RewardEngine.calculate_payment_option(base_price=m_val, deal=d, card=c, category=cat, spend_to_date=spend_to_date))
-                options.append(RewardEngine.calculate_payment_option(base_price=m_val, deal=None, card=c, category=cat, spend_to_date=spend_to_date))
-    else:
-        for d in category_deals:
-            for c in cards:
-                options.append(RewardEngine.calculate_payment_option(base_price=base_price, deal=d, card=c, category=cat, spend_to_date=spend_to_date))
-        for c in cards:
-            options.append(RewardEngine.calculate_payment_option(base_price=base_price, deal=None, card=c, category=cat, spend_to_date=spend_to_date))
-
-    ranked = RewardEngine.rank_options(options)
-    if not ranked:
-        state["final_response"] = "no reliable deal found"
-        state["abstained"] = True
-        state["skip_planning"] = True
-        return state
-
-    if pref_card:
-        named_opts = [o for o in options if o.card_id == pref_card]
-        if named_opts:
-            best_opt = RewardEngine.rank_options(named_opts)[0]
-            other_opts = [o for o in ranked if o.card_id != pref_card]
-            runner_up = other_opts[0] if other_opts else None
-        else:
-            best_opt = ranked[0]
-            runner_up = next((o for o in ranked if o.card_id != best_opt.card_id), None)
-    else:
-        best_opt = ranked[0]
-        runner_up = next((o for o in ranked if o.card_id != best_opt.card_id), None)
-
-    budget = state.get("budget")
-    if budget is not None and best_opt and best_opt.effective_price.amount > float(budget):
-        state["final_response"] = f"no reliable deal found; the cheapest grounded option is RS {best_opt.effective_price.amount:,.0f}."
-        state["abstained"] = True
-        state["skip_planning"] = True
-        state["best_option"] = None
-        state["citations"] = []
-        return state
-
-    min_eff = best_opt.effective_price.amount
-    tied_options = [o for o in ranked if abs(o.effective_price.amount - min_eff) < 0.01 and (not pref_card or o.card_id == pref_card)]
-    tied_merchants = []
-    for o in tied_options:
-        m = o.discount_source_id or (o.base_price.record_id.split("_")[-1].capitalize() if o.base_price and o.base_price.record_id and "_" in o.base_price.record_id else "Partner Merchant")
-        if m.startswith("deal_"):
-            d_rec = DataIndex.get_deal_by_id(m)
-            if d_rec and d_rec.get("merchant"):
-                m = d_rec["merchant"]
-        tied_merchants.append(m)
-    
-    unique_tied_merchants = list(dict.fromkeys(tied_merchants))
-    state["is_tie"] = len(unique_tied_merchants) > 1
-    state["tied_merchants"] = unique_tied_merchants
-
-    state["payment_options"] = ranked
-    state["best_option"] = best_opt
-    state["runner_up_option"] = runner_up
-    state["trace"] = best_opt.trace if best_opt else [base_price]
-    state["citations"] = best_opt.citations if best_opt else []
-    return state
 
 def validate_provenance_node(state: AgentState) -> AgentState:
+    # A handler that formatted monetary figures itself already ran the validator against
+    # its own trace; its verdict is final and must not be overwritten with a blanket pass.
+    if state.get("provenance_checked"):
+        return state
+
     if state.get("skip_planning") or state.get("is_info_query"):
         state["provenance_valid"] = True
         state["unverified_tokens"] = []
         return state
 
     query = (state.get("query") or "").strip()
-    tool_res = state.get("tool_results", {})
-    planned = state.get("planned_tools", [])
-
-    # Scenario Price Watcher Path
-    if "watch_price" in tool_res or "watch_price" in planned or "drops below" in query.lower() or "price watch" in query.lower():
-        watch_res = tool_res.get("watch_price")
-        if not watch_res:
-            amt = state.get("budget")
-            match_target = re.search(r"(?:below|at|target|drops\s*to|under)\s*(?:RS\s*|₹\s*)?(\d{3,6})", query, re.IGNORECASE)
-            if match_target:
-                amt = float(match_target.group(1))
-            if amt is None:
-                amt = 25000.0
-            watch_res = watch_price(query, target_price=amt)
-
-        prod = watch_res.get("product_name", "Requested Product")
-        target_val = watch_res.get("target_price")
-        target_amt = target_val.amount if target_val else 25000.0
-
-        curr_val = watch_res.get("current_lowest_price")
-        curr_amt = curr_val.amount if curr_val else 0.0
-        merch = watch_res.get("lowest_price_merchant", "Catalog")
-
-        gap_val = watch_res.get("gap")
-        gap_amt = gap_val.amount if gap_val else max(0.0, curr_amt - target_amt)
-
-        cmp_data = tool_res.get("compare_prices", {})
-        prod_id = cmp_data.get("product_id") or "prod_watch"
-        cits = [prod_id]
-        if state.get("retrieved_records"):
-            cits.append(state["retrieved_records"][0]["deal_id"])
-
-        draft = (
-            f"Recommendation: Price watch registered for '{prod}' at target RS {target_amt:.0f}.\n"
-            f"• Current Lowest Price: RS {curr_amt:.0f} (at {merch})\n"
-            f"• Target Price: RS {target_amt:.0f}\n"
-            f"• Price Gap to Target: RS {gap_amt:.0f} (above target)\n"
-            f"• Watch Status: ACTIVE. No currently active deal crosses the RS {target_amt:.0f} threshold.\n"
-            f"Citations: {cits}"
-        )
-        new_trace = [
-            Value(amount=target_amt, provenance=Provenance.SOURCE, record_id="target_price"),
-            Value(amount=curr_amt, provenance=Provenance.SOURCE, record_id="current_price"),
-            Value(amount=gap_amt, provenance=Provenance.DERIVED, record_id="gap_price"),
-            Value(amount=round(curr_amt, 0), provenance=Provenance.SOURCE, record_id="curr_rounded"),
-            Value(amount=round(gap_amt, 0), provenance=Provenance.DERIVED, record_id="gap_rounded"),
-            Value(amount=round(target_amt, 0), provenance=Provenance.SOURCE, record_id="target_rounded")
-        ]
-        is_valid, validated, unverified = ProvenanceValidator.validate(draft, new_trace)
-        state["trace"] = new_trace
-        state["draft_response"] = draft
-        state["final_response"] = draft
-        state["best_option"] = None
-        state["is_watch_query"] = True
-        state["citations"] = cits
-        state["provenance_valid"] = is_valid
-        state["unverified_tokens"] = unverified
-        return state
-
-    best_opt: PaymentOption = state.get("best_option")
-    runner_up: PaymentOption = state.get("runner_up_option")
-    trace = state.get("trace", [])
-    citations = state.get("citations", [])
+    best_opt: Optional[PaymentOption] = state.get("best_option")
+    runner_up: Optional[PaymentOption] = state.get("runner_up_option")
+    trace: List[Value] = state.get("trace", [])
+    citations: List[str] = state.get("citations", [])
 
     if not best_opt or state.get("abstained", False):
         final_resp = state.get("final_response", "")
-        if state.get("skip_planning") or state.get("is_info_query"):
-            state["provenance_valid"] = True
-            state["unverified_tokens"] = []
-            return state
         if not final_resp:
-            final_resp = f"No reliable deal or card record found for '{query}'."
+            final_resp = "no reliable deal found"
         is_valid, validated, unverified = ProvenanceValidator.validate(final_resp, trace)
         state["final_response"] = final_resp
         state["provenance_valid"] = is_valid
         state["unverified_tokens"] = unverified
-        if not is_valid:
-            state["final_response"] = (
-                f"No reliable deal or card record found for '{query}'."
-            )
-            state["provenance_valid"] = True
-            state["unverified_tokens"] = []
         return state
 
-    # Hard Grounding Check
-    retrieved_ids = {r.get("deal_id") for r in state.get("retrieved_records", []) if r.get("deal_id")}
-    retrieved_ids.update({"hdfc_millennia", "sbi_cashback", "axis_ace", "prod_macbook_air_m2", "prod_sony_headphones"})
-    grounded_citations = [c for c in citations if c in retrieved_ids]
-    if not grounded_citations and citations:
-        grounded_citations = [list(retrieved_ids)[0]] if retrieved_ids else citations
-    citations = grounded_citations
+    # Strict Grounded Citations: Only records actually consumed this turn
+    valid_source_ids: Set[str] = set()
+    if best_opt.discount_source_id:
+        valid_source_ids.add(best_opt.discount_source_id)
+    if best_opt.card_id:
+        valid_source_ids.add(best_opt.card_id)
+    if best_opt.base_price and best_opt.base_price.record_id:
+        rid = best_opt.base_price.record_id
+        if "_" in rid and not rid.startswith(("user", "session", "spend", "compare", "compute", "target", "gap")):
+            valid_source_ids.add(rid.rsplit("_", 1)[0])
+
+    citations = [c for c in citations if c in valid_source_ids]
 
     eff = best_opt.effective_price.amount
     base = best_opt.base_price.amount
@@ -964,91 +478,131 @@ def validate_provenance_node(state: AgentState) -> AgentState:
     post = best_opt.price_after_discount.amount
     reward = best_opt.reward_earned.amount
 
-    # Half-up rounding helper to ensure strict arithmetic consistency: base - disc - reward = eff
-    def _round_half_up(n: float) -> float:
-        return float(math.floor(n + 0.5)) if n >= 0 else float(math.ceil(n - 0.5))
-
-    reward_display = _round_half_up(reward)
-    eff_display = _round_half_up(post - reward_display)
-    disc_display = _round_half_up(disc)
-    post_display = _round_half_up(post)
-    base_display = _round_half_up(base)
-
-    if trace:
-        trace.extend([
-            Value(amount=reward_display, provenance=Provenance.DERIVED, record_id="reward_rounded"),
-            Value(amount=eff_display, provenance=Provenance.DERIVED, record_id="effective_rounded"),
-            Value(amount=disc_display, provenance=Provenance.DERIVED, record_id="disc_rounded"),
-            Value(amount=post_display, provenance=Provenance.DERIVED, record_id="post_rounded"),
-            Value(amount=base_display, provenance=Provenance.SOURCE, record_id="base_rounded"),
-            Value(amount=round(reward, 2), provenance=Provenance.DERIVED, record_id="reward_2dec"),
-            Value(amount=round(eff, 2), provenance=Provenance.DERIVED, record_id="effective_2dec"),
-            Value(amount=round(disc, 2), provenance=Provenance.DERIVED, record_id="disc_2dec"),
-            Value(amount=round(post, 2), provenance=Provenance.DERIVED, record_id="post_2dec"),
-            Value(amount=round(base, 2), provenance=Provenance.SOURCE, record_id="base_2dec"),
-            Value(amount=round(reward, 0), provenance=Provenance.DERIVED, record_id="reward_r0"),
-            Value(amount=round(eff, 0), provenance=Provenance.DERIVED, record_id="effective_r0"),
-            Value(amount=round(disc, 0), provenance=Provenance.DERIVED, record_id="disc_r0"),
-            Value(amount=round(post, 0), provenance=Provenance.DERIVED, record_id="post_r0"),
-            Value(amount=round(base, 0), provenance=Provenance.SOURCE, record_id="base_r0"),
-            Value(amount=float(math.floor(post)), provenance=Provenance.DERIVED, record_id="post_floor"),
-            Value(amount=float(math.ceil(post)), provenance=Provenance.DERIVED, record_id="post_ceil"),
-            Value(amount=float(math.floor(disc)), provenance=Provenance.DERIVED, record_id="disc_floor"),
-            Value(amount=float(math.ceil(disc)), provenance=Provenance.DERIVED, record_id="disc_ceil")
-        ])
-
-    cmp = tool_res.get("compare_prices", {})
-    resolved_store = cmp.get("lowest_price_merchant")
-    if not resolved_store and best_opt and best_opt.base_price and best_opt.base_price.record_id:
-        rid = best_opt.base_price.record_id
-        if "_" in rid and not rid.startswith("user") and not rid.startswith("session") and not rid.startswith("spend"):
-            resolved_store = rid.split("_")[-1].capitalize()
-
-    merchant_name = best_opt.discount_source_id or resolved_store or "Partner Merchant"
+    # Name the merchant the option is actually priced at. `discount_source_id` is only a
+    # fallback label for amount-only calculations that have no catalog price behind them.
+    resolved_store = merchant_display(best_opt.merchant) if best_opt.merchant else None
+    # With no catalog price behind the option (an amount-only calculation), the applied
+    # deal's own record still names the merchant it belongs to — a grounded label, unlike
+    # printing the deal id where a merchant name belongs.
+    if not resolved_store and best_opt.discount_source_id:
+        _d = DataIndex.get_deal_by_id(best_opt.discount_source_id)
+        resolved_store = (_d or {}).get("merchant")
+    merchant_name = resolved_store or "Partner Merchant"
     card_name = best_opt.card_id or "Payment Card"
+    # A pure reward calculation has no merchant behind it, so naming a placeholder one
+    # would assert something the dataset does not say.
+    where = f" at {merchant_name}" if resolved_store else ""
 
     cap_note = ""
     if best_opt.cap_hit:
         raw = best_opt.raw_reward.amount
         lost = best_opt.reward_lost_to_cap.amount
-        raw_display = _round_half_up(raw)
-        lost_display = _round_half_up(lost)
-        trace.append(Value(amount=raw_display, provenance=Provenance.DERIVED, record_id="raw_rounded"))
-        trace.append(Value(amount=lost_display, provenance=Provenance.DERIVED, record_id="lost_rounded"))
-        cap_note = f"\n• Capped Reward: RS {reward_display:.0f} (uncapped raw reward RS {raw_display:.0f}, RS {lost_display:.0f} lost to cap headroom)"
+        cap_note = f"\n• Capped Reward: RS {reward:.0f} (uncapped raw reward RS {raw:.0f}, RS {lost:.0f} lost to cap headroom)"
 
+    # Dynamic Deal Terms from Authoritative Deal Record
     disc_note = f"RS {disc:.0f}"
-    if merchant_name == "deal_017":
-        disc_note = f"RS {disc:.0f} (5% max RS 250 limit of deal_017 terms)"
-    elif merchant_name == "deal_002":
-        disc_note = f"RS {disc:.0f} (10% max RS 500 limit of deal_002 terms)"
+    if best_opt.discount_source_id:
+        d_rec = DataIndex.get_deal_by_id(best_opt.discount_source_id)
+        if d_rec:
+            d_type = d_rec.get("discount_type")
+            d_val = float(d_rec.get("discount_value", 0))
+            max_d = float(d_rec.get("max_discount", float("inf")))
+            if d_type == "percentage":
+                pct = d_val * 100 if d_val <= 1.0 else d_val
+                if max_d != float("inf"):
+                    disc_note = f"RS {disc:.0f} ({pct:g}% capped at RS {max_d:.0f})"
+                else:
+                    disc_note = f"RS {disc:.0f} ({pct:g}% discount)"
+            else:
+                disc_note = f"RS {disc:.0f} (flat discount)"
 
     runner_up_note = ""
     if runner_up and runner_up.card_id != card_name:
-        runner_eff = _round_half_up(runner_up.effective_price.amount)
-        runner_diff = _round_half_up(runner_eff - eff_display)
+        runner_eff = runner_up.effective_price.amount
+        runner_diff = runner_eff - eff
         if runner_diff > 0:
             runner_up_note = f"\n• Runner-up Card: {runner_up.card_id} (Effective RS {runner_eff:.0f}, beats runner-up by RS {runner_diff:.0f})"
+            trace.append(runner_up.effective_price)
             trace.append(Value(amount=runner_diff, provenance=Provenance.DERIVED, record_id="runner_diff"))
-            trace.append(Value(amount=runner_eff, provenance=Provenance.DERIVED, record_id="runner_up_eff"))
-            trace.append(Value(amount=round(runner_up.effective_price.amount - eff, 2), provenance=Provenance.DERIVED, record_id="runner_diff_exact"))
-            trace.append(Value(amount=round(runner_up.effective_price.amount, 2), provenance=Provenance.DERIVED, record_id="runner_up_eff_exact"))
-            trace.append(Value(amount=round(runner_up.effective_price.amount, 0), provenance=Provenance.DERIVED, record_id="runner_up_eff_r0"))
 
-    tie_msg = f"Cheapest effective price is RS {eff_display:.0f}. There is a tie between {' and '.join(state.get('tied_merchants', []))}.\n" if state.get("is_tie") else ""
+    # A visible deal that looked better but could not be used is worth a line. The figures
+    # come from the deal records and the price already in the trace, so they validate like
+    # every other number in the answer.
+    why_not = ""
+    for rejected in state.get("rejected_visible_deals") or []:
+        if not why_not:
+            why_not = "\nWhy not the other visible deals?"
+        why_not += f"\n• {rejected.deal_id} ({rejected.headline}): {rejected.reason}."
+        trace.extend(rejected.values)
+
+    tie_msg = _tie_sentence(state)
+
+    # A reward question is answered in reward terms: which card, at what rate, paying what,
+    # and against which cap. The discount/post-discount lines belong to a purchase question
+    # and are noise here. Every figure still comes from the same PaymentOption.
+    resolved_q = state.get("resolved_query")
+    if getattr(resolved_q, "objective", None) == "max_reward" and disc <= 0.01:
+        rate_pct = float(best_opt.reward_rate_applied or 0.0) * 100
+        cat_name = (getattr(resolved_q, "category", None) or "this spend")
+        cap_line = ""
+        if best_opt.cap_hit and best_opt.cap_explanation:
+            cap_line = f"\n• {best_opt.cap_explanation}"
+        elif best_opt.card_id:
+            _card = DataIndex.get_card_by_id(best_opt.card_id) or {}
+            _caps = _card.get("caps", {})
+            _cat_cap = (_caps.get("category_caps") or {}).get(cat_name)
+            _monthly = _caps.get("monthly_cashback_cap")
+            if _cat_cap is not None:
+                cap_line = f"\n• Applicable Cap: RS {float(_cat_cap):.0f} on {cat_name}"
+            elif _monthly is not None and float(_monthly) != 999999:
+                cap_line = f"\n• Applicable Cap: RS {float(_monthly):.0f} per month"
+
+        reward_draft = (
+            f"{_tie_sentence(state)}"
+            f"Recommendation: Pay using {card_name}{where}.\n"
+            f"• Purchase Amount: RS {base:.0f}\n"
+            f"• Reward Rate: {rate_pct:g}% on {cat_name}\n"
+            f"• Cashback Earned: RS {reward:.0f}{cap_line}\n"
+            f"• Effective Final Price: RS {eff:.0f}.{runner_up_note}{why_not}\n"
+            f"Citations: {citations}"
+        )
+        product_names = [p["name"] for p in resolved_q.products] if resolved_q else []
+        state["provenance_masked_names"] = list(product_names)
+        ok, _validated, unverified = ProvenanceValidator.validate(
+            reward_draft, trace, product_names=product_names
+        )
+        if not ok:
+            state["final_response"] = (
+                f"Validation blocked response output: numeric values {unverified} "
+                f"were unverified against computation trace."
+            )
+            state["provenance_valid"] = False
+            state["unverified_tokens"] = unverified
+            return state
+        state["draft_response"] = reward_draft
+        state["final_response"] = reward_draft
+        state["provenance_valid"] = True
+        state["unverified_tokens"] = []
+        return state
 
     draft = (
         f"{tie_msg}"
-        f"Recommendation: Pay using {card_name} at {merchant_name}.\n"
+        f"Recommendation: Pay using {card_name}{where}.\n"
         f"• Base Price: RS {base:.0f}\n"
         f"• Instant Discount: {disc_note}\n"
         f"• Post-Discount Price: RS {post:.0f}\n"
-        f"• Cashback Earned: RS {reward_display:.0f}{cap_note}\n"
-        f"• Effective Final Price: RS {eff_display:.0f}.{runner_up_note}\n"
+        f"• Cashback Earned: RS {reward:.0f}{cap_note}\n"
+        f"• Effective Final Price: RS {eff:.0f}.{runner_up_note}{why_not}\n"
         f"Citations: {citations}"
     )
 
-    is_valid, validated, unverified = ProvenanceValidator.validate(draft, trace)
+    # Validate draft against trace once (no synthetic padding). Catalog product names are
+    # masked so a model number inside a name is not read as an ungrounded price; every
+    # actual figure is still checked.
+    resolved_q = state.get("resolved_query")
+    product_names = [p["name"] for p in resolved_q.products] if resolved_q else []
+    state["provenance_masked_names"] = list(product_names)
+    is_valid, validated, unverified = ProvenanceValidator.validate(draft, trace, product_names=product_names)
 
     if not is_valid:
         state["final_response"] = (
@@ -1064,6 +618,7 @@ def validate_provenance_node(state: AgentState) -> AgentState:
     state["provenance_valid"] = True
     state["unverified_tokens"] = []
     return state
+
 
 def build_agent_graph() -> StateGraph:
     workflow = StateGraph(AgentState)
@@ -1093,5 +648,6 @@ def build_agent_graph() -> StateGraph:
     workflow.add_edge("validate_provenance", END)
 
     return workflow.compile()
+
 
 graph_app = build_agent_graph()

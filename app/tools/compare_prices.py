@@ -25,7 +25,7 @@ def compare_prices(product_name: str) -> Dict[str, Any]:
 
     # 2. Token match fallback with digit model scoring
     if not matched_product:
-        query_digits = set(re.findall(r"\b\d+\b", product_lower))
+        query_digits = {d for d in re.findall(r"\b\d+\b", product_lower) if int(d) < 1000}
         stopwords = {"can", "get", "the", "for", "and", "deal", "deals", "best", "price", "prices", "card", "cards", "with", "from", "find", "order", "want", "need", "offer", "discount", "cheaper", "cheapest", "way", "buy", "purchase", "where", "how", "what", "much", "tell"}
         tokens = [t for t in re.findall(r"[a-z0-9]+", product_lower) if t not in stopwords]
         
@@ -34,7 +34,7 @@ def compare_prices(product_name: str) -> Dict[str, Any]:
 
         for p in products:
             p_name = p["name"].lower()
-            p_digits = set(re.findall(r"\b\d+\b", p_name))
+            p_digits = {d for d in re.findall(r"\b\d+\b", p_name) if int(d) < 1000}
             p_tokens = set(re.findall(r"[a-z0-9]+", p_name))
             
             # If query specified specific model numbers (e.g. 16 vs 15), product must have matching digits

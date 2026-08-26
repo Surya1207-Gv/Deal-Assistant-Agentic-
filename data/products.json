@@ -3,6 +3,7 @@
     "product_id": "prod_grocery_basket_1",
     "name": "Monthly Grocery Essentials Basket",
     "category": "groceries",
+    "subcategory": "staples",
     "prices": {
       "BigBasket": 4000,
       "Blinkit": 4150,
@@ -15,6 +16,7 @@
     "product_id": "prod_iphone_15",
     "name": "Apple iPhone 15 128GB",
     "category": "electronics",
+    "subcategory": "smartphone",
     "prices": {
       "Amazon": 69900,
       "Flipkart": 68999,
@@ -27,6 +29,7 @@
     "product_id": "prod_sony_headphones",
     "name": "Sony WH-1000XM5 Noise Cancelling Headphones",
     "category": "electronics",
+    "subcategory": "headphones",
     "prices": {
       "Amazon": 26990,
       "Flipkart": 27500,
@@ -38,6 +41,7 @@
     "product_id": "prod_macbook_air_m2",
     "name": "Apple MacBook Air M2 256GB",
     "category": "electronics",
+    "subcategory": "laptop",
     "prices": {
       "Amazon": 92900,
       "Flipkart": 91990,
@@ -49,6 +53,7 @@
     "product_id": "prod_flight_del_bom",
     "name": "Flight Ticket Delhi to Mumbai",
     "category": "travel",
+    "subcategory": "flight",
     "prices": {
       "MakeMyTrip": 5400,
       "EaseMyTrip": 5250,
@@ -61,6 +66,7 @@
     "product_id": "prod_hotel_goa_resort",
     "name": "Beach Resort Stay Goa (2 Nights)",
     "category": "travel",
+    "subcategory": "hotel",
     "prices": {
       "MakeMyTrip": 12500,
       "Agoda": 11800,
@@ -72,6 +78,7 @@
     "product_id": "prod_swiggy_gourmet_meal",
     "name": "Gourmet Dinner Meal Box for 4",
     "category": "food",
+    "subcategory": "dining",
     "prices": {
       "Swiggy": 1800,
       "Zomato": 1850,
@@ -83,6 +90,7 @@
     "product_id": "prod_nike_running_shoes",
     "name": "Nike Pegasus 40 Running Shoes",
     "category": "shopping",
+    "subcategory": "footwear",
     "prices": {
       "Myntra": 8495,
       "Ajio": 8200,
@@ -94,6 +102,7 @@
     "product_id": "prod_samsung_4k_tv",
     "name": "Samsung 55-inch 4K Smart TV",
     "category": "electronics",
+    "subcategory": "tv",
     "prices": {
       "Amazon": 44990,
       "Flipkart": 43990,
@@ -105,6 +114,7 @@
     "product_id": "prod_coffee_maker",
     "name": "Delonghi Espresso Coffee Machine",
     "category": "electronics",
+    "subcategory": "appliances",
     "prices": {
       "Amazon": 14990,
       "Flipkart": 15490,
@@ -116,6 +126,7 @@
     "product_id": "prod_organic_milk_curd_pack",
     "name": "Organic Milk & Dairy Monthly Pass",
     "category": "groceries",
+    "subcategory": "dairy",
     "prices": {
       "Country Delight": 1500,
       "BigBasket": 1600,
@@ -127,6 +138,7 @@
     "product_id": "prod_levis_jeans",
     "name": "Levi's 511 Slim Fit Jeans",
     "category": "shopping",
+    "subcategory": "apparel",
     "prices": {
       "Myntra": 2399,
       "Ajio": 2299,
@@ -138,6 +150,7 @@
     "product_id": "prod_electricity_bill_payment",
     "name": "Monthly Electricity Utility Bill",
     "category": "bills",
+    "subcategory": "utility",
     "prices": {
       "Amazon Pay": 3500,
       "Paytm": 3500,
@@ -149,6 +162,7 @@
     "product_id": "prod_kindle_paperwhite",
     "name": "Kindle Paperwhite 16GB",
     "category": "electronics",
+    "subcategory": "ereader",
     "prices": {
       "Amazon": 13999,
       "Croma": 14999
@@ -159,6 +173,7 @@
     "product_id": "prod_backpack_samsonite",
     "name": "Samsonite Laptop Backpack 25L",
     "category": "shopping",
+    "subcategory": "accessories",
     "prices": {
       "Myntra": 4200,
       "Amazon": 3999,
@@ -170,6 +185,7 @@
     "product_id": "prod_iphone_16",
     "name": "Apple iPhone 16 128GB",
     "category": "electronics",
+    "subcategory": "smartphone",
     "prices": {
       "Flipkart": 65900,
       "Amazon": 66900,

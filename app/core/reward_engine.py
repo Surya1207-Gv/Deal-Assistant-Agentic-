@@ -19,6 +19,12 @@ class PaymentOption:
     effective_price: Value
     citations: List[str]
     trace: List[Value] = field(default_factory=list)
+    # The merchant this option is priced at, carried explicitly rather than re-derived by
+    # parsing `base_price.record_id`. Multi-word merchants ("Reliance Digital",
+    # "Country Delight", "Booking.com") made that parsing lossy, and merchant identity is
+    # the grouping key for merchant comparisons — it has to be exact.
+    merchant: Optional[str] = None
+    product_id: Optional[str] = None
 
 class RewardEngine:
     """
@@ -28,12 +34,45 @@ class RewardEngine:
     """
 
     @staticmethod
+    def deal_discount(deal: Dict[str, Any], amount: float) -> float:
+        """
+        The discount a deal yields on `amount`, from the deal record's own fields.
+
+        THE single implementation of this formula. It previously existed three times — here,
+        in the aggregate primitive, and in the lookup handler — which is exactly the kind of
+        drift spec section 30 forbids: three copies can disagree, and two of them applied a
+        different `max_discount` default than the engine that produced the actual answer.
+
+        Purely arithmetic: whether the deal APPLIES at all (merchant, card, category,
+        product scope, minimum spend) is decided by `is_deal_eligible`, never here.
+        """
+        if not deal:
+            return 0.0
+        disc_val = float(deal.get("discount_value", 0.0) or 0.0)
+        max_disc = deal.get("max_discount")
+        max_disc = float(max_disc) if max_disc is not None else float("inf")
+
+        if deal.get("discount_type") == "percentage":
+            # Rates are stored as fractions (0.05); tolerate a whole-percent spelling (5).
+            rate = disc_val if disc_val <= 1.0 else disc_val / 100.0
+            return min(amount * rate, max_disc)
+        return min(disc_val, max_disc)
+
+    @staticmethod
+    def display_percentage(deal: Dict[str, Any]) -> float:
+        """A percentage deal's rate rendered for display, from the same normalization."""
+        d_val = float(deal.get("discount_value", 0.0) or 0.0)
+        return d_val * 100 if d_val <= 1.0 else d_val
+
+    @staticmethod
     def calculate_payment_option(
         base_price: Value,
         deal: Optional[Dict[str, Any]] = None,
         card: Optional[Dict[str, Any]] = None,
         category: str = "general",
-        spend_to_date: Optional[Dict[str, float]] = None
+        spend_to_date: Optional[Dict[str, float]] = None,
+        merchant: Optional[str] = None,
+        product_id: Optional[str] = None
     ) -> PaymentOption:
         if spend_to_date is None:
             spend_to_date = {}
@@ -55,19 +94,16 @@ class RewardEngine:
             is_card_eligible = (not card_sp) or (card_id and card_sp.lower() == card_id.lower())
 
             if is_card_eligible and amount >= min_spend:
-                disc_type = deal.get("discount_type", "flat")
-                disc_val = deal.get("discount_value", 0.0)
-
-                if disc_type == "percentage":
-                    raw_disc = amount * disc_val
-                    max_disc = deal.get("max_discount", float("inf"))
-                    discount_amount = min(raw_disc, max_disc)
-                else:
-                    discount_amount = float(disc_val)
+                discount_amount = RewardEngine.deal_discount(deal, amount)
 
                 if discount_amount > 0:
                     discount_source_id = deal_id
                     citations.append(deal_id)
+                    max_d = deal.get("max_discount")
+                    if max_d is not None and max_d < float("inf"):
+                        trace.append(Value(amount=float(max_d), provenance=Provenance.SOURCE, record_id=f"{deal_id}_max_discount"))
+                    if min_spend > 0:
+                        trace.append(Value(amount=float(min_spend), provenance=Provenance.SOURCE, record_id=f"{deal_id}_min_spend"))
 
         discount_applied = Value(
             amount=round(discount_amount, 2),
@@ -223,14 +259,29 @@ class RewardEngine:
             reward_lost_to_cap=reward_lost_val,
             effective_price=effective_price_val,
             citations=citations,
-            trace=trace
+            trace=trace,
+            merchant=merchant,
+            product_id=product_id
         )
 
+    # Ranking metrics. Not every question is "cheapest" (spec section 31): a cashback
+    # question ranks by reward earned, a price question by effective final price. The
+    # metric is chosen by the caller from the resolved operation; the arithmetic behind
+    # every metric is the same PaymentOption produced above.
+    METRICS = {
+        # (extractor, descending?) — ties always broken by card_id for determinism.
+        "effective_price": (lambda o: o.effective_price.amount, False),
+        "reward": (lambda o: o.reward_earned.amount, True),
+        "discount": (lambda o: o.discount_applied.amount, True),
+    }
+
     @classmethod
-    def rank_options(cls, options: List[PaymentOption]) -> List[PaymentOption]:
+    def rank_options(cls, options: List[PaymentOption], metric: str = "effective_price") -> List[PaymentOption]:
+        extractor, descending = cls.METRICS.get(metric, cls.METRICS["effective_price"])
+
         def sort_key(opt: PaymentOption):
-            eff = opt.effective_price.amount
+            val = extractor(opt)
             cid = opt.card_id or "zzzzz"
-            return (eff, cid)
+            return (-val if descending else val, cid)
 
         return sorted(options, key=sort_key)

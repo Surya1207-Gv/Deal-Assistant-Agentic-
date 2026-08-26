@@ -86,7 +86,14 @@ def run_all():
         citations = result.get("citations", [])
         best_opt = result.get("best_option")
 
-        is_valid, validated, unverified = ProvenanceValidator.validate(final_response, trace)
+        # Independent re-check, run against the same inputs the pipeline used: catalog
+        # wording the answer quotes verbatim is masked, so a record's own title (e.g.
+        # "... Test Deal 1") is not counted as an unverified monetary claim. Every number
+        # outside that quoted text is still validated against the trace.
+        masked_names = result.get("provenance_masked_names", [])
+        is_valid, validated, unverified = ProvenanceValidator.validate(
+            final_response, trace, product_names=masked_names
+        )
         prov_status = "PASSED" if is_valid else "FAILED"
         total_checked = len(validated) + len(unverified)
 

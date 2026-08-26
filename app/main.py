@@ -3,7 +3,6 @@ import sys
 import time
 import json
 import asyncio
-import re
 import traceback
 from pathlib import Path
 from typing import AsyncGenerator
@@ -42,78 +41,28 @@ def health_check():
     return {"status": "ok", "service": "Deal Assistant Agentic RAG + Planner"}
 
 async def event_generator(request: ChatRequest) -> AsyncGenerator[str, None]:
+    """
+    Thin transport layer: all natural-language understanding (budget/category/card
+    extraction, intent resolution, entity resolution) lives in the shared agent graph
+    (QueryResolver / operations), not here. This keeps CLI and API behaviorally
+    identical for the same query — the API only applies explicit, structured
+    request fields (not text re-parsed from `query`) as session overrides.
+    """
     start_time = time.time()
     session = MemoryManager.get_session(request.session_id)
 
-    q_lower = (request.query or "").lower()
-
-    if request.category:
+    if request.category is not None:
         session.category = request.category
-    elif "grocery" in q_lower or "groceries" in q_lower:
-        session.category = "groceries"
-    elif "electronic" in q_lower or "phone" in q_lower:
-        session.category = "electronics"
-
-    match_budget = re.search(r"(?:budget\s*is\s*|worth\s*|spending\s*|my\s*budget\s*(?:is\s*)?)(?:RS\s*|₹\s*)?(\d{3,6})", request.query or "", re.IGNORECASE)
-    if match_budget:
-        session.budget = float(match_budget.group(1))
-        session.conversation_state["budget"] = float(match_budget.group(1))
-    elif request.budget is not None:
+    if request.budget is not None:
         session.budget = request.budget
-        session.conversation_state["budget"] = request.budget
-
-    card_aliases = {
-        "hdfc millennia": "hdfc_millennia",
-        "millennia": "hdfc_millennia",
-        "sbi cashback": "sbi_cashback",
-        "sbi": "sbi_cashback",
-        "axis ace": "axis_ace",
-        "axis": "axis_ace",
-        "amex smart earn": "amex_smartearn",
-        "amex": "amex_smartearn",
-        "icici amazon pay": "icici_amazon_pay",
-        "icici": "icici_amazon_pay",
-        "hdfc regalia": "hdfc_regalia",
-        "regalia": "hdfc_regalia",
-    }
-
-    preferred_card = None
-    for phrase, card_id in card_aliases.items():
-        if phrase in q_lower:
-            preferred_card = card_id
-            break
-    if preferred_card is not None:
-        if "actually" in q_lower or "instead" in q_lower or "use" in q_lower:
-            session.preferred_card = preferred_card
-            session.conversation_state["preferred_card"] = preferred_card
-        elif "prefer" in q_lower or "i prefer" in q_lower:
-            session.preferred_card = preferred_card
-            session.conversation_state["preferred_card"] = preferred_card
-        elif "for " in q_lower and any(cat in q_lower for cat in ["electronics", "groceries", "travel", "shopping", "food", "bills"]):
-            category_name = None
-            if "electronics" in q_lower:
-                category_name = "electronics"
-            elif "groceries" in q_lower or "grocery" in q_lower:
-                category_name = "groceries"
-            elif "travel" in q_lower:
-                category_name = "travel"
-            elif "shopping" in q_lower:
-                category_name = "shopping"
-            elif "food" in q_lower or "dining" in q_lower:
-                category_name = "food"
-            elif "bills" in q_lower:
-                category_name = "bills"
-            if category_name:
-                session.conversation_state.setdefault("category_preferences", {})
-                session.conversation_state["category_preferences"][category_name] = preferred_card
     if request.preferred_card is not None:
         session.preferred_card = request.preferred_card
-        session.conversation_state["preferred_card"] = request.preferred_card
+        session.thread.preferred_card = request.preferred_card
 
     initial_state = {
         "session_id": request.session_id,
         "query": request.query or "",
-        "category": session.category or "groceries",
+        "category": session.category,
         "budget": session.budget,
         "preferred_card": session.preferred_card,
         "conversation_state": session.conversation_state,

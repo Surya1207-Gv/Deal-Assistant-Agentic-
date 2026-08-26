@@ -3,7 +3,7 @@ import os
 import re
 import math
 from typing import List, Dict, Any, Tuple
-from app.rag.index import DataIndex
+from app.rag.index import DataIndex, GENERIC_WORDS
 
 try:
     from rank_bm25 import BM25Okapi
@@ -104,39 +104,80 @@ class HybridRetriever:
 
     def _is_ungrounded_entity(self, query: str) -> bool:
         """
-        Dynamically verifies if the query asks for a specific named product, service, or card
-        that does NOT exist anywhere in products.json, cards.json, or deals.json.
-        No hardcoded entity lists.
+        Does this query name a product, service or card the catalogue does not contain?
+
+        Entirely case-folded and entirely data-driven. The two vocabularies come from
+        DataIndex (see `entity_tokens` / `catalogue_tokens`) — there is no list of things to
+        reject, and nothing is refused for being absent from a hand-written set.
+
+        The decision runs in two steps:
+
+          0. ANCHOR. If any word in the query identifies a catalogue record — a product,
+             merchant, card, category or deal id — the query is about something we hold, and
+             we stop. This is what keeps a legitimate request grounded no matter how it is
+             phrased or capitalised.
+
+          Only for a query with no anchor at all:
+
+          a. An explicit purchase phrasing whose object is entirely unknown to the dataset
+             ("cheapest way to buy a Dyson vacuum cleaner"). Catches single-word names.
+
+          b. A RUN of consecutive words the dataset has never used anywhere, and which are
+             not ordinary connective or shopping words. Two in a row is a name for something
+             out of scope ("tesla cybertruck", "visa signature", "peloton bike"). A
+             recognised word BREAKS the run rather than being skipped, so ordinary phrasing
+             never accumulates into a false name.
+
+        This replaced a rule that looked for runs of CAPITALISED words. Capitalisation is
+        orthography, not evidence: it vanished in a lower-cased request and became
+        meaningless in a Title-Cased one, so the same question was in scope or out of scope
+        depending only on which shift key the user pressed.
         """
-        q_low = query.lower()
-        
-        # Build dynamic vocabulary of all known entities in authoritative JSONs
-        known_tokens = set()
-        for p in self.products:
-            known_tokens.update(re.findall(r"[a-z0-9]+", p["name"].lower()))
-            known_tokens.update(re.findall(r"[a-z0-9]+", p["product_id"].lower()))
-            for m in p.get("prices", {}).keys():
-                known_tokens.update(re.findall(r"[a-z0-9]+", m.lower()))
+        query_tokens = re.findall(r"[a-z0-9]+", query.lower())
+        if not query_tokens:
+            return False
 
-        for c in self.cards:
-            known_tokens.update(re.findall(r"[a-z0-9]+", c["name"].lower()))
-            known_tokens.update(re.findall(r"[a-z0-9]+", c["card_id"].lower()))
+        # 0. Anchor: does anything here identify a record we hold?
+        if any(t in DataIndex.entity_tokens() for t in query_tokens):
+            return False
 
-        for d in self.deals:
-            known_tokens.update(re.findall(r"[a-z0-9]+", d["title"].lower()))
-            known_tokens.update(re.findall(r"[a-z0-9]+", d["merchant"].lower()))
-            known_tokens.update(re.findall(r"[a-z0-9]+", d.get("category", "").lower()))
+        vocabulary = DataIndex.catalogue_tokens()
 
-        # Check if query asks to buy/price a specific named entity
-        action_match = re.search(r"(?:cheapest|best price for|buy|purchase|way to buy|price for|drops below|promo code for|deal for|quota for|compare prices for)\s+([a-zA-Z0-9\s'-]+)", query, re.IGNORECASE)
+        def unseen(token: str) -> bool:
+            return (
+                len(token) >= 3
+                and not token.isdigit()
+                and token not in vocabulary
+                and token not in GENERIC_WORDS
+                and token not in GENERIC_STOPWORDS
+            )
+
+        # (a) An explicit purchase phrasing with an object the dataset has never used.
+        action_match = re.search(
+            r"(?:cheapest|best price for|buy|purchase|way to buy|price for|drops below|"
+            r"promo code for|deal for|quota for|compare prices for)\s+([a-zA-Z0-9\s'-]+)",
+            query, re.IGNORECASE,
+        )
         if action_match:
-            candidate = action_match.group(1).strip().lower()
-            candidate_tokens = [t for t in re.findall(r"[a-z0-9]+", candidate) if t not in GENERIC_STOPWORDS and len(t) > 2]
-            if candidate_tokens:
-                # If all significant candidate tokens are completely absent from known catalog
-                matched_count = sum(1 for t in candidate_tokens if t in known_tokens)
-                if matched_count == 0:
+            candidate_tokens = [
+                t for t in re.findall(r"[a-z0-9]+", action_match.group(1).strip().lower())
+                if t not in GENERIC_STOPWORDS and len(t) > 2
+            ]
+            # "drops below RS 85000" captures a PRICE, not a name; a candidate with no
+            # alphabetic token names nothing.
+            if candidate_tokens and any(not t.isdigit() for t in candidate_tokens):
+                if all(unseen(t) for t in candidate_tokens):
                     return True
+
+        # (b) A run of consecutive unseen words.
+        run = 0
+        for token in query_tokens:
+            if unseen(token):
+                run += 1
+                if run >= 2:
+                    return True
+            else:
+                run = 0
 
         return False
 

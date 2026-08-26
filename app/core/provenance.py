@@ -1,4 +1,5 @@
 from __future__ import annotations
+import math
 import re
 from dataclasses import dataclass, field
 from enum import Enum
@@ -31,7 +32,12 @@ class ProvenanceValidator:
     def extract_numeric_tokens(cls, text: str, product_names: Optional[List[str]] = None) -> List[tuple[str, float]]:
         cleaned_text = text
 
-        # 1. Mask known product names so their model numbers (e.g. "Apple iPhone 15 128GB", "Sony WH-1000XM5") aren't parsed as prices
+        # 1. Mask CATALOG TEXT the answer quotes verbatim — product names, deal titles, card
+        # names. A number inside such text ("Apple iPhone 15 128GB", "Prompt Injection Test
+        # Deal 1", "HDFC Grocery Special 500 Cashback") is part of a record's own wording,
+        # not a figure the answer is asserting, and it is grounded by the very act of being
+        # quoted. Masking removes only that text; every number outside it is still checked,
+        # so this narrows false positives without widening what can pass unverified.
         if product_names:
             for p_name in product_names:
                 if p_name and len(p_name) > 3:
@@ -57,23 +63,31 @@ class ProvenanceValidator:
         extracted = []
         for match in matches:
             raw = match.group(0).strip()
-            num_str = match.group(1).replace(",", "")
+            num_str = match.group(1).replace(",", "").strip()
             is_percent = match.group(2) == "%" or "%" in raw
             if not num_str:
                 continue
             try:
                 val = float(num_str)
-                # Percentages like 5%, 10% are verified or treated as rate
+                # Percentages are ignored from strict currency validation
                 if is_percent:
                     continue
-                extracted.append((raw, round(val, 2)))
+                extracted.append((raw, val))
             except ValueError:
                 continue
         return extracted
 
     @classmethod
-    def validate(cls, draft_text: str, trace: List[Value]) -> tuple[bool, List[str], List[str]]:
-        extracted = cls.extract_numeric_tokens(draft_text)
+    def validate(cls, draft_text: str, trace: List[Value],
+                 product_names: Optional[List[str]] = None) -> tuple[bool, List[str], List[str]]:
+        """
+        `product_names` masks catalog product titles before numbers are extracted, so a
+        model number inside a name the answer legitimately mentions ("Apple iPhone 15",
+        "MacBook Air M2") is not mistaken for an unverified monetary figure. The masking
+        only removes NON-monetary text; every remaining number is still checked against the
+        trace, so this cannot be used to smuggle an ungrounded figure past validation.
+        """
+        extracted = cls.extract_numeric_tokens(draft_text, product_names=product_names)
         if not extracted:
             return True, [], []
 
@@ -81,19 +95,28 @@ class ProvenanceValidator:
             unverified_tokens = [raw for raw, _ in extracted]
             return False, [], unverified_tokens
 
-        known_values: Set[float] = {v.rounded_amount() for v in trace}
-        extended_known = set(known_values)
-        for v in trace:
-            amt = v.rounded_amount()
-            extended_known.add(amt)
-            if 0 < amt <= 1.0:
-                extended_known.add(round(amt * 100, 2))
+        known_amounts: List[float] = [float(v.amount) for v in trace if v is not None]
 
         validated = []
         unverified = []
 
         for raw_token, val in extracted:
-            if val in extended_known or any(abs(val - kv) < 0.01 for kv in extended_known):
+            matched = False
+            for kv in known_amounts:
+                # Direct match within 0.01
+                if abs(val - kv) < 0.01:
+                    matched = True
+                    break
+                # Integer-rounded rendering match (e.g. 24048.25 rendered as 24048)
+                if abs(val - round(kv)) < 0.01 or abs(val - math.floor(kv)) < 0.01 or abs(val - math.ceil(kv)) < 0.01:
+                    matched = True
+                    break
+                # Rate percentage match (e.g. 0.05 -> 5 or 5.0)
+                if 0 < kv <= 1.0 and (abs(val - (kv * 100.0)) < 0.01 or abs(val - round(kv * 100.0)) < 0.01):
+                    matched = True
+                    break
+            
+            if matched:
                 validated.append(raw_token)
             else:
                 unverified.append(raw_token)

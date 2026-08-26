@@ -63,11 +63,8 @@ def run_interactive_cli():
             break
 
         if query.lower() == "reset":
-            session.spend_to_date = {}
-            session.history = []
-            session.budget = None
-            session.preferred_card = None
-            session.category = None
+            MemoryManager.reset_session(session_id)
+            session = MemoryManager.get_session(session_id)
             print("Session state reset.")
             continue
 
@@ -78,7 +75,7 @@ def run_interactive_cli():
         state_input = {
             "session_id": session_id,
             "query": query,
-            "category": session.category or "groceries",
+            "category": session.category,
             "budget": session.budget,
             "preferred_card": session.preferred_card,
             "spend_to_date": session.spend_to_date,
@@ -100,6 +97,22 @@ def run_interactive_cli():
             print(f"RETRIEVED    : {len(retrieved)} records")
             for r in retrieved[:3]:
                 print(f"  [{r.get('deal_id')}] {r.get('title')} ({r.get('merchant')})")
+
+        # A comparison is about several alternatives, so show the candidate space that
+        # was actually costed rather than only the winner's derivation.
+        cands = result.get("comparison_candidates") or []
+        if cands:
+            axis = result.get("comparison_axis", "option")
+            print(f"\nCANDIDATE SPACE ({len(cands)} {axis}s, each independently derived):")
+            for c in cands:
+                o = c.option
+                print(
+                    f"  - {c.label:<34}"
+                    f" base RS {o.base_price.amount:>10,.2f}"
+                    f" | discount RS {o.discount_applied.amount:>8,.2f} ({o.discount_source_id or 'none'})"
+                    f" | reward RS {o.reward_earned.amount:>8,.2f} ({o.card_id})"
+                    f" | effective RS {o.effective_price.amount:>10,.2f}"
+                )
 
         best_opt = result.get("best_option")
         if best_opt:
